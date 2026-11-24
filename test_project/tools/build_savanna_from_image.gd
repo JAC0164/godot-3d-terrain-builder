@@ -1,6 +1,6 @@
 extends SceneTree
 ## A savanna from a pixel map (assets/pixel_maps/savane_anneau.png, made with
-## map-editor.html), the way build_savanna.gd does it from a generated map:
+## docs/map-editor.html), the way build_savanna.gd does it from a generated map:
 ## green = dry grass plain, red = laterite plateau (raised), blue = greener
 ## depression (lowered). Flat laterite and burnt patches are painted on the
 ## plain, a dried waterhole sits in the middle of the largest blue area, and

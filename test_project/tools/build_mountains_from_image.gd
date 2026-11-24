@@ -1,6 +1,6 @@
 extends SceneTree
 ## A mountain landscape from a pixel map (assets/pixel_maps/savane_anneau.png,
-## made with map-editor.html). The image is enlarged x2 (sharp pixels: 1 pixel
+## made with docs/map-editor.html). The image is enlarged x2 (sharp pixels: 1 pixel
 ## = 2 x 2 cells of 1 m, so the decor keeps its size) and imported by the
 ## plugin: green = ground, blue = valleys (lowered), red = mountains. Then,
 ## game side (not in the plugin):

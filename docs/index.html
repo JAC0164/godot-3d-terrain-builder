@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lowpoly Terrain Editor for Godot 4</title>
+  <meta name="description" content="Godot 4 editor plugin to paint low poly 3D terrain by hand, or generate it from a seed or a small pixel image: ground styles, relief, roads, rivers, waterholes, vegetation, biomes, streamed maps, phone-friendly.">
+  <meta property="og:title" content="Lowpoly Terrain Editor for Godot 4">
+  <meta property="og:description" content="Paint low poly 3D terrain, generate it from a seed or a pixel map, play it.">
+  <meta property="og:image" content="showcase/hero.jpg">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="./"><span class="brand-mark" aria-hidden="true"></span>Lowpoly Terrain Editor</a>
+      <nav class="nav" aria-label="Main">
+        <a href="./" aria-current="page">Home</a>
+        <a href="guide.html">Guide</a>
+        <a href="map-editor.html">Pixel Map Editor</a>
+        <a href="https://youtu.be/rg--qJoRvB0">Video</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero wrap">
+      <h1>Low poly 3D terrain for Godot 4</h1>
+      <p class="lead">An editor plugin to paint terrain by hand, or generate it from a seed or from a
+        small pixel image. Ground styles, relief, roads, rivers, dried waterholes, grass, trees and
+        props, biomes, big streamed maps and phone-friendly settings.</p>
+      <div class="actions">
+        <a class="btn primary" href="guide.html#install">Get started</a>
+        <a class="btn" href="guide.html">Read the guide</a>
+        <a class="btn" href="map-editor.html">Open the Pixel Map Editor</a>
+      </div>
+      <img class="hero-img" src="showcase/hero.jpg" alt="A savanna map made with Generate Map: river, tracks, acacias, baobabs and laterite plateaus" width="1920" height="1080">
+    </section>
+
+    <section class="wrap" id="features">
+      <h2>What it does</h2>
+      <div class="grid features">
+        <div class="card"><h3>7 tools</h3><p>Ground, Relief, Flatten, Road, River, Waterhole and Vegetation, in the 3D editor menu bar. Undo / Redo everywhere.</p></div>
+        <div class="card"><h3>Generate Map</h3><p>A whole map from a recipe and a seed: plateaus, lowlands, ground patches, rivers, tracks, waterholes. Same seed, same map.</p></div>
+        <div class="card"><h3>Pixel maps</h3><p>One pixel = one terrain cell. Paint 4 colours, or make the map in the <a href="map-editor.html">Pixel Map Editor</a>.</p></div>
+        <div class="card"><h3>Biomes</h3><p>A reusable <code>.tres</code>: ground styles, baked shading, waterhole colours and what grows where, on which ground and slope.</p></div>
+        <div class="card"><h3>Details</h3><p>Grass, rocks, trees and props as one MultiMesh per layer and chunk, with wind and tree collision. Your own models too.</p></div>
+        <div class="card"><h3>Look</h3><p>Smooth or faceted ground, up to 7 textured ground styles blended, your own ground and detail materials (toon, unshaded...).</p></div>
+        <div class="card"><h3>In game</h3><p>Rebuilds over frames, streams big maps around the player, can generate a new map at start, and tells you when the ground is ready.</p></div>
+        <div class="card"><h3>Phones</h3><p>Small scenes, water without screen-copy refraction, optional ground shadows, frame-budgeted building.</p></div>
+      </div>
+    </section>
+
+    <section class="wrap" id="savanna">
+      <h2>One generated map</h2>
+      <p class="muted">Every shot below is the same map made by <strong>Generate Map</strong> (Senegal Savanna
+        preset, seed 7, plus one river), untouched. The light comes from the test project: the plugin
+        builds the terrain, each game lights it its own way.</p>
+      <div class="grid gallery">
+        <figure><img src="showcase/river.jpg" alt="River" loading="lazy"><figcaption><strong>Rivers</strong> carve their bed and never flow uphill</figcaption></figure>
+        <figure><img src="showcase/track.jpg" alt="Track" loading="lazy"><figcaption><strong>Tracks</strong> follow the ground</figcaption></figure>
+        <figure><img src="showcase/waterhole.jpg" alt="Dried waterhole" loading="lazy"><figcaption><strong>Dried waterholes</strong> with cracked mud</figcaption></figure>
+        <figure><img src="showcase/acacias.jpg" alt="Acacias" loading="lazy"><figcaption><strong>Biomes</strong>: what grows where, with wind</figcaption></figure>
+        <figure><img src="showcase/baobab.jpg" alt="Baobabs" loading="lazy"><figcaption><strong>Built-in props</strong>, or your own models</figcaption></figure>
+        <figure><img src="showcase/pixel_map_terrain.jpg" alt="Terrain built from a pixel map" loading="lazy"><figcaption><strong>Generate from Image</strong>: one pixel = one cell</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="wrap" id="biomes">
+      <h2>Other biomes</h2>
+      <p class="muted">Each on its own Generate Map map: the same recipe with the biome's ground styles and
+        hills closing the border. Temperate is built in; the others are made game side with the biome API.</p>
+      <div class="grid gallery">
+        <figure><img src="showcase/tempere.jpg" alt="Temperate biome" loading="lazy"><figcaption><strong>Temperate</strong> (built in)</figcaption></figure>
+        <figure><img src="showcase/desert.jpg" alt="Desert biome" loading="lazy"><figcaption><strong>Desert</strong>: sand, sandstone mesas, oasis</figcaption></figure>
+        <figure><img src="showcase/neige.jpg" alt="Snow biome" loading="lazy"><figcaption><strong>Snow</strong>: snowfield, rock, frozen lakes</figcaption></figure>
+        <figure><img src="showcase/tropical.jpg" alt="Tropical biome" loading="lazy"><figcaption><strong>Tropical</strong>: lush grass, jungle hills, swamp</figcaption></figure>
+        <figure><img src="showcase/automne.jpg" alt="Autumn biome" loading="lazy"><figcaption><strong>Autumn</strong>: golden grass, red hills</figcaption></figure>
+        <figure><img src="showcase/volcan.jpg" alt="Volcanic biome" loading="lazy"><figcaption><strong>Volcanic</strong>: ash, basalt, lava</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="wrap" id="pixel-maps">
+      <h2>From a pixel map</h2>
+      <p class="muted">Paint a small image with 4 colours (or make it in the
+        <a href="map-editor.html">Pixel Map Editor</a>), drop it in <em>Inspector &gt; Advanced &gt; Pixel Map</em>
+        and click <strong>Generate from Image</strong>.</p>
+      <img class="wide-img" src="showcase/pixel_map.jpg" alt="A 96 x 96 pixel map and the terrain built from it" loading="lazy">
+    </section>
+
+    <section class="wrap" id="start">
+      <h2>Start in a minute</h2>
+      <ol>
+        <li>Copy <code>addons/lowpoly_terrain_editor</code> into your project's <code>addons/</code> folder.</li>
+        <li><em>Project &gt; Project Settings &gt; Plugins</em>: enable <strong>Lowpoly Terrain Editor</strong>.</li>
+        <li>Open a 3D scene, click <strong>New Terrain</strong> in the 3D editor menu bar, then drag in the 3D view or click <strong>Generate Map</strong> in the Inspector.</li>
+      </ol>
+      <p>Godot <strong>4.7</strong> (developed and tested with 4.7.2). Forward+, Mobile and Compatibility renderers.
+        Everything else is in the <a href="guide.html">guide</a>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">Lowpoly Terrain Editor 0.0.1 by Galsen Games Studio.</div>
+  </footer>
+</body>
+</html>

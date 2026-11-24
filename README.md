@@ -4,6 +4,8 @@ Godot 4 editor plugin to paint low poly 3D terrain by hand, or generate it from 
 from a small pixel image (1x1 to 256x256). Ground styles, relief, roads, rivers, dried
 waterholes, grass, trees and props, biomes, big streamed maps and phone-friendly settings.
 
+**Documentation and guide: https://jac0164.github.io/godot-3d-terrain-builder/** · [Pixel Map Editor](https://jac0164.github.io/godot-3d-terrain-builder/map-editor.html)
+
 ![A savanna map made with Generate Map](docs/showcase/hero.jpg)
 
 <p>
@@ -42,14 +44,14 @@ detail layers using the built-in meshes.*
 | Biomes | A biome is a reusable `.tres`: ground styles, baked shading (blend, slope tint, ambient occlusion, cliff darkening), waterhole colours and detail layers (what grows, how dense, on which ground and slope). Presets: **Temperate**, **Senegal Savanna** (dry grass, laterite, acacias, baobabs, termite mounds). |
 | Details | Grass, rocks, shrubs, trees and props drawn as one MultiMesh per layer and chunk, with wind on plants, collision for trees, and your own models (`.glb`, `.gltf`, `.blend`, `.fbx`, `.tscn`) as detail layers. |
 | Map generation | **Generate Map** from a recipe + seed (same seed = same map): plateaus, lowlands, ground patches, tracks, waterholes. Presets: Senegal Savanna, Temperate Island. |
-| Pixel maps | **Generate from Image**: white = empty, green = ground, red = raised, blue = lowered. `map-editor.html` (offline, in the browser) generates and edits these maps. |
+| Pixel maps | **Generate from Image**: white = empty, green = ground, red = raised, blue = lowered. The [Pixel Map Editor](https://jac0164.github.io/godot-3d-terrain-builder/map-editor.html) (in the browser) generates and edits these maps. |
 | Look | Smooth or faceted ground, baked shading, up to 7 textured ground styles blended together, your own Ground / Detail materials (toon, unshaded...). |
 | In game | A `_LowpolyTerrainRuntime` child rebuilds what the scene does not store, spread over frames, streams big maps around the player, can generate a new map at start (procedural levels), and emits `terrain_ready` to spawn the player. |
 | Phones | Small scenes ("All at runtime" stores only the terrain data), water without screen-copy refraction, optional ground shadows, frame-budgeted building. |
 
 ### From a pixel map
 
-Paint a small image with 4 colours (or make it in `map-editor.html`), drop it in
+Paint a small image with 4 colours (or make it in the [Pixel Map Editor](https://jac0164.github.io/godot-3d-terrain-builder/map-editor.html)), drop it in
 *Inspector > Advanced > Pixel Map* and click **Generate from Image**:
 
 ![A 96 x 96 pixel map and the terrain built from it](docs/showcase/pixel_map.jpg)
@@ -94,7 +96,7 @@ Compatibility renderers.
    Rivers & Waterholes** and **Game**. Everything else is under **Advanced**. Hover a
    setting for its explanation.
 
-The full guide is [`HOW TO USE.txt`](HOW%20TO%20USE.txt). Video: https://youtu.be/rg--qJoRvB0
+The full guide is on the [documentation site](https://jac0164.github.io/godot-3d-terrain-builder/guide.html). Video: https://youtu.be/rg--qJoRvB0
 
 ## In game
 
@@ -127,11 +129,10 @@ func new_level() -> void:
 | Path | Content |
 |---|---|
 | `addons/lowpoly_terrain_editor/` | The plugin. `ARCHITECTURE.md` there describes its modules. |
-| `map-editor.html` | Pixel map editor (React, one offline file). Source in `tools/pixel-map-editor/`. |
-| `map-generator.html` | Older pixel map generator (random islands). |
 | `tools/blender/` | Scripts that model the built-in props in Blender and convert them to GDScript. |
 | `test_project/` | Godot project used to develop and test the plugin: scenes, benches, phone builds, look examples, check scripts and audit reports. |
-| `docs/showcase/` | The images of this page, made by `test_project/tools/render_showcase.gd` (Forward+, 1920 x 1080). |
+| `docs/` | The documentation site (GitHub Pages): `index.html`, `guide.html` and `map-editor.html`, the pixel map editor (React, one file; source in `tools/pixel-map-editor/`). |
+| `docs/showcase/` | The images of this page and the site, made by `test_project/tools/render_showcase.gd` (Forward+, 1920 x 1080). |
 
 ### Checks
 

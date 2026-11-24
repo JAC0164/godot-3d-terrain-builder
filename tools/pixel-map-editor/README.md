@@ -13,8 +13,9 @@ Advanced > Pixel Map > Source Image > Generate from Image). One pixel = one terr
 Up to 256 x 256 pixels. The export uses these exact colours, so every pixel is recognised by
 the plugin.
 
-**To use it:** open `map-editor.html` (plugin folder root) in a browser. It works offline and
-needs no install. This folder is only its source code.
+**To use it:** open it online at https://jac0164.github.io/godot-3d-terrain-builder/map-editor.html, or open
+`docs/map-editor.html` from the repository in a browser (one file, works offline, no install).
+This folder is only its source code.
 
 ## Features
 
@@ -51,7 +52,7 @@ needs no install. This folder is only its source code.
 npm install
 npm run dev      # http://localhost:5173
 npm test         # vitest: generator, drawing, history, PNG colours
-npm run build    # typecheck + single-file build -> ../../map-editor.html
+npm run build    # typecheck + single-file build -> ../../docs/map-editor.html
 ```
 
 Vite + React + TypeScript. `vite-plugin-singlefile` inlines everything into one HTML file.
