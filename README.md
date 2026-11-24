@@ -96,7 +96,7 @@ Compatibility renderers.
    Rivers & Waterholes** and **Game**. Everything else is under **Advanced**. Hover a
    setting for its explanation.
 
-The full guide is on the [documentation site](https://jac0164.github.io/godot-3d-terrain-builder/guide.html). Video: https://youtu.be/rg--qJoRvB0
+The full guide is on the [documentation site](https://jac0164.github.io/godot-3d-terrain-builder/guide.html). Video of the original plugin, by OriginlessGamer: https://youtu.be/rg--qJoRvB0
 
 ## In game
 
@@ -148,4 +148,5 @@ the script.
 
 ## Version
 
-0.0.1 by Galsen Games Studio. Audit of this version: `test_project/AUDIT_V0_0_1.md`.
+0.0.1 by Galsen Games Studio, based on the original Lowpoly Terrain Editor (1.0) by
+[OriginlessGamer](https://www.youtube.com/@OriginlessGamerApps). Audit of this version: `test_project/AUDIT_V0_0_1.md`.
