@@ -7,17 +7,32 @@ waterholes, grass, trees and props, biomes, big streamed maps and phone-friendly
 ![A savanna map made with Generate Map](docs/showcase/hero.jpg)
 
 <p>
-<img src="docs/showcase/river.jpg" width="49%" alt="River">
-<img src="docs/showcase/track.jpg" width="49%" alt="Track">
-<img src="docs/showcase/waterhole.jpg" width="49%" alt="Dried waterhole">
+<img src="docs/showcase/river.jpg" width="32%" alt="River">
+<img src="docs/showcase/track.jpg" width="32%" alt="Track">
+<img src="docs/showcase/waterhole.jpg" width="32%" alt="Dried waterhole">
 <img src="docs/showcase/acacias.jpg" width="49%" alt="Acacias">
 <img src="docs/showcase/baobab.jpg" width="49%" alt="Baobabs">
-<img src="docs/showcase/overview.jpg" width="49%" alt="Whole map">
 </p>
 
 *Every shot above is one map made by **Generate Map** (Senegal Savanna preset, seed 7, plus
 one river), untouched. The light (low warm sun, haze) and the far landscape come from the test
 project: the plugin builds the terrain, each game lights it its own way.*
+
+Other biomes, each on its own **Generate Map** map (the same recipe with the biome's ground
+styles, and hills closing the map border):
+
+<p>
+<img src="docs/showcase/tempere.jpg" width="49%" alt="Temperate biome">
+<img src="docs/showcase/desert.jpg" width="49%" alt="Desert biome">
+<img src="docs/showcase/neige.jpg" width="49%" alt="Snow biome">
+<img src="docs/showcase/tropical.jpg" width="49%" alt="Tropical biome">
+<img src="docs/showcase/automne.jpg" width="49%" alt="Autumn biome">
+<img src="docs/showcase/volcan.jpg" width="49%" alt="Volcanic biome">
+</p>
+
+*Temperate is built in. Desert, snow, tropical, autumn and volcanic are made game side with
+the biome API (`tools/trial_biomes.gd` in the test project): ground styles, baked shading and
+detail layers using the built-in meshes.*
 
 ## Features
 
@@ -41,9 +56,8 @@ Paint a small image with 4 colours (or make it in `map-editor.html`), drop it in
 
 ### Biomes
 
-The same pixel map with each biome: the plugin's two (Temperate, Senegal Savanna), five
-trial biomes made in the test project (desert, snow, volcanic, tropical, autumn) and a
-mountain variant.
+The same pixel map built with each biome, to compare them: the plugin's two (Temperate,
+Senegal Savanna), the five trial biomes above and a mountain variant.
 
 ![The same pixel map built with each biome](docs/showcase/biomes.png)
 

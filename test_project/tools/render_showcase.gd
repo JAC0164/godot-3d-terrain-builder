@@ -3,9 +3,12 @@ extends SceneTree
 ## map made by Generate Map (preset Senegal Savanna), lit for beauty shots
 ## (low warm sun, soft shadows, SSAO, golden haze; Forward+), filmed from
 ## viewpoints found on the map itself: river, track, waterhole, acacias,
-## baobab, overview. Plus "pixel map -> terrain" (assets/pixel_maps) and a
-## contact sheet. The lighting is the showcase's, not the plugin's (each game
-## lights its own scenes). Real window, kept off screen:
+## baobab. Then one landscape per other biome (the plugin's Temperate and the
+## trial biomes of tools/trial_biomes.gd), each on its own Generate Map map
+## with hills closing the border, each with its own light. Plus "pixel map ->
+## terrain" (assets/pixel_maps) and a contact sheet. The lighting is the
+## showcase's, not the plugin's (each game lights its own scenes). Real
+## window, kept off screen:
 ##   godot --path . --rendering-method forward_plus --position -3000,-3000 --resolution 1920x1080 --script res://tools/render_showcase.gd -- [--seed=7] [--only=hero,river]
 
 const ADDON := "res://addons/lowpoly_terrain_editor/"
@@ -15,6 +18,8 @@ const MapGenerator = preload(ADDON + "generation/map_generator.gd")
 const TerrainBuilder = preload(ADDON + "mesh/terrain_builder.gd")
 const WaterholeStyle = preload(ADDON + "styles/waterhole_style.gd")
 const WaterholeMesher = preload(ADDON + "mesh/waterhole_mesher.gd")
+const MapPatch = preload(ADDON + "generation/map_patch.gd")
+const TrialBiomes = preload("res://tools/trial_biomes.gd")
 
 const OUT := "res://../docs/showcase"
 const RECIPE := ADDON + "generation/presets/senegal_savanna_map.tres"
@@ -28,6 +33,29 @@ var _caption_box: PanelContainer
 var _title: Control
 var _sun_dir := Vector2.ZERO
 var _obstacles: Array[Vector3] = []
+var _environment: Environment
+var _sun: DirectionalLight3D
+
+## Light of each scene: sky top, sky horizon (and haze), sun colour, sun energy.
+const LIGHTS := {
+	"savanna": [Color(0.22, 0.43, 0.78), Color(0.86, 0.78, 0.66), Color(1.0, 0.86, 0.68), 1.6],
+	"tempere": [Color(0.24, 0.47, 0.84), Color(0.76, 0.84, 0.9), Color(1.0, 0.93, 0.82), 1.3],
+	"desert": [Color(0.28, 0.5, 0.84), Color(0.93, 0.84, 0.68), Color(1.0, 0.9, 0.74), 1.25],
+	"neige": [Color(0.3, 0.5, 0.82), Color(0.82, 0.88, 0.95), Color(1.0, 0.95, 0.9), 0.95],
+	"tropical": [Color(0.2, 0.48, 0.84), Color(0.78, 0.87, 0.84), Color(1.0, 0.94, 0.8), 1.5],
+	"automne": [Color(0.3, 0.44, 0.72), Color(0.93, 0.79, 0.62), Color(1.0, 0.8, 0.58), 1.5],
+	"volcan": [Color(0.24, 0.2, 0.27), Color(0.7, 0.46, 0.36), Color(1.0, 0.68, 0.48), 1.35],
+}
+
+## Map of each biome scene: tracks (count, colour), rivers, waterholes, plateau height.
+const MAPS := {
+	"tempere": [1, Color(0.55, 0.45, 0.32), 1, 0.0, 4.5],
+	"desert": [1, Color(0.8, 0.64, 0.44), 0, 1.2, 6.0],
+	"neige": [0, Color.WHITE, 0, 0.0, 7.0],
+	"tropical": [1, Color(0.45, 0.33, 0.2), 1, 0.0, 5.0],
+	"automne": [1, Color(0.5, 0.36, 0.22), 0, 0.0, 4.5],
+	"volcan": [0, Color.WHITE, 0, 0.0, 7.0],
+}
 
 func _initialize() -> void:
 	var args := {"seed": "7", "only": ""}
@@ -80,22 +108,134 @@ func _initialize() -> void:
 	for shot: Dictionary in shots:
 		if not only.is_empty() and not only.has(shot["name"]):
 			continue
-		camera.fov = shot.get("fov", 55.0)
-		camera.look_at_from_position(shot["from"], shot["to"])
-		_title.visible = shot["name"] == "hero"
-		_caption_box.visible = not _title.visible
-		_caption.text = shot["caption"]
-		for f in range(30):
-			await RenderingServer.frame_post_draw
-		var image := get_root().get_texture().get_image()
-		image.convert(Image.FORMAT_RGB8)
-		image.save_jpg("%s/%s.jpg" % [out_dir, shot["name"]], 0.9)
-		print("wrote ", shot["name"])
+		await _capture(camera, shot, out_dir)
+	var biome_entries := _biome_entries()
+	for i in biome_entries.size():
+		var entry := biome_entries[i]
+		if not only.is_empty() and not only.has(entry["file"]):
+			continue
+		# A map of its own per biome (another seed).
+		_build_biome_map(root, entry, int(args["seed"]) + 101 * (i + 1))
+		_collect_obstacles()
+		await _capture(camera, _landscape_view().merged({"name": entry["file"], "caption": entry["caption"]}), out_dir)
+	_set_light("savanna")
 	if only.is_empty() or only.has("pixel_map"):
 		await _pixel_map_shot(root, camera, out_dir)
 		_pixel_map_panel(out_dir)
 	_sheet(out_dir)
 	quit(0)
+
+func _capture(camera: Camera3D, shot: Dictionary, out_dir: String) -> void:
+	camera.fov = shot.get("fov", 55.0)
+	camera.look_at_from_position(shot["from"], shot["to"])
+	_title.visible = shot["name"] == "hero"
+	_caption_box.visible = not _title.visible
+	_caption.text = shot["caption"]
+	for f in range(30):
+		await RenderingServer.frame_post_draw
+	var image := get_root().get_texture().get_image()
+	image.convert(Image.FORMAT_RGB8)
+	image.save_jpg("%s/%s.jpg" % [out_dir, shot["name"]], 0.9)
+	print("wrote ", shot["name"])
+
+# --- Other biomes -----------------------------------------------------------------
+
+## The plugin's Temperate biome and the trial biomes (file, biome, the three
+## styles: main, raised, lowered), with their caption.
+func _biome_entries() -> Array[Dictionary]:
+	var list: Array[Dictionary] = [
+		{"file": "tempere", "biome": load(ADDON + "biomes/presets/temperate.tres"),
+			"styles": ["Grass", "Rock", "Sand"], "caption": "Temperate biome (built in)"},
+	]
+	var captions := {"desert": "Desert", "neige": "Snow", "tropical": "Tropical", "automne": "Autumn", "volcan": "Volcanic"}
+	for entry: Dictionary in TrialBiomes.list():
+		var key: String = entry["file"]
+		list.append(entry.merged({"caption": "%s biome (your own, made with the biome API)" % captions[key]}))
+	return list
+
+## A new map with this biome: the savanna recipe with the biome's styles, no
+## patches, hills closing the border (the map does not end in the void).
+func _build_biome_map(root: Node3D, entry: Dictionary, map_seed: int) -> void:
+	var key: String = entry["file"]
+	if is_instance_valid(_terrain):
+		_terrain.free()
+	_terrain = Node3D.new()
+	_terrain.name = "LowpolyTerrain"
+	root.add_child(_terrain)
+	TerrainData.initialize(_terrain)
+	var styles: Array = entry["styles"]
+	var map: Array = MAPS[key]
+	var recipe: Resource = (load(RECIPE) as Resource).duplicate()
+	recipe.set("biome", entry["biome"])
+	recipe.set("size", 160)
+	recipe.set("base_style", styles[0])
+	recipe.set("plateau_style", styles[1])
+	recipe.set("lowland_style", styles[2])
+	var no_patches: Array[MapPatch] = []
+	recipe.set("patches", no_patches)
+	recipe.set("relief", 0.6)
+	recipe.set("plateau_height", map[4])
+	recipe.set("plateau_coverage", 0.14)
+	recipe.set("border", 1)
+	recipe.set("border_style", styles[1])
+	recipe.set("border_width", 28.0)
+	recipe.set("border_height", 12.0)
+	recipe.set("track_count", map[0])
+	recipe.set("track_color", map[1])
+	recipe.set("river_count", map[2])
+	recipe.set("river_width", 4.5)
+	recipe.set("river_depth", 0.9)
+	recipe.set("waterholes_per_10k_cells", map[3])
+	var stats: Dictionary = MapGenerator.generate(_terrain, recipe, map_seed)
+	print(key, ": ", stats)
+	var builder := TerrainBuilder.new()
+	builder.owner_provider = func() -> Node: return root
+	builder.rebuild_all(_terrain)
+	_heights = _terrain.get_meta(Meta.HEIGHTS)
+	_resolution = _terrain.get_meta(Meta.RESOLUTION)
+	_world_size = _terrain.get_meta(Meta.WORLD_SIZE)
+	_set_light(key)
+
+## A landscape: from inside the map, 13 m up, across it to the border hills.
+## Only a view the terrain hides is refused; the rest is a score: the camera
+## on the plain, no tree under it, no relief close in front, the sun from the
+## side.
+func _landscape_view() -> Dictionary:
+	var half := _world_size * 0.5
+	var best := {}
+	var best_score := -INF
+	for step in 72:
+		var ring: float = [0.35, 0.5, 0.6][step / 24]
+		var from := Vector2.from_angle(TAU * float(step % 24) / 24.0) * half * ring
+		var to := -from * 0.35
+		var eye := _ground(from) + 13.0
+		var aim := _ground(to)
+		var hidden := false
+		for k in range(1, 16):
+			var t := float(k) / 15.0 * 0.6
+			if _ground(from.lerp(to, t)) > lerpf(eye, aim, t) - 4.0:
+				hidden = true
+				break
+		if hidden:
+			continue
+		var look := (to - from).normalized()
+		var trees := 0
+		for o in _obstacles:
+			if Vector2(o.x, o.y).distance_to(from) < 12.0:
+				trees += 1
+		var foreground := 0.0
+		for k in range(2, 12):
+			var p := from.lerp(to, float(k) / 30.0)
+			for side in [-1.0, 0.0, 1.0]:
+				foreground = maxf(foreground, _ground(p + look.orthogonal() * side * float(k) * 2.5) - _ground(from))
+		var score := -absf(look.dot(_sun_dir) - 0.35) - maxf(_ground(from) - 1.5, 0.0) * 0.4 			- float(trees) * 0.3 - foreground * 0.15
+		if score > best_score:
+			best_score = score
+			best = {"from": Vector3(from.x, eye, from.y), "to": Vector3(to.x, aim, to.y), "fov": 58.0}
+	if best.is_empty():
+		best = {"from": Vector3(0, half * 0.5, half * 0.6), "to": Vector3.ZERO, "fov": 55.0}
+	print("  view score %.2f" % best_score)
+	return best
 
 ## The savanna built from the pixel map (scenes/savane_image.tscn, made by
 ## tools/build_savanna_from_image.gd), same light, seen from the bottom of the
@@ -105,7 +245,8 @@ func _pixel_map_shot(root: Node3D, camera: Camera3D, out_dir: String) -> void:
 	if scene == null:
 		print("pixel map shot skipped (run tools/build_savanna_from_image.gd first)")
 		return
-	_terrain.queue_free()
+	if is_instance_valid(_terrain):
+		_terrain.queue_free()
 	var map := scene.instantiate()
 	root.add_child(map)
 	camera.fov = 42.0
@@ -125,34 +266,40 @@ func _pixel_map_shot(root: Node3D, camera: Camera3D, out_dir: String) -> void:
 ## The project's savanna look (world/savanna_environment.tres) with a lower,
 ## warmer sun, finer shadows and contact shadows (SSAO) for still images.
 func _add_lighting(root: Node3D) -> void:
-	var environment := (load("res://world/savanna_environment.tres") as Environment).duplicate(true)
-	var sky_material := environment.sky.sky_material as ProceduralSkyMaterial
-	sky_material.sky_top_color = Color(0.22, 0.43, 0.78)
-	sky_material.sky_horizon_color = Color(0.86, 0.78, 0.66)
-	sky_material.ground_horizon_color = Color(0.86, 0.78, 0.66)
-	environment.ssao_enabled = true
-	environment.ssao_radius = 1.4
-	environment.ssao_intensity = 1.4
-	environment.fog_depth_begin = 120.0
-	environment.fog_depth_end = 650.0
-	environment.fog_sky_affect = 0.12
-	environment.adjustment_saturation = 1.0
+	_environment = (load("res://world/savanna_environment.tres") as Environment).duplicate(true)
+	_environment.ssao_enabled = true
+	_environment.ssao_radius = 1.4
+	_environment.ssao_intensity = 1.4
+	_environment.fog_depth_begin = 120.0
+	_environment.fog_depth_end = 650.0
+	_environment.fog_sky_affect = 0.12
+	_environment.adjustment_saturation = 1.0
 	var world_environment := WorldEnvironment.new()
-	world_environment.environment = environment
+	world_environment.environment = _environment
 	root.add_child(world_environment)
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-26.0, -40.0, 0.0)
-	sun.light_color = Color(1.0, 0.86, 0.68)
-	sun.light_energy = 1.6
-	sun.light_angular_distance = 0.5
-	sun.shadow_enabled = true
-	sun.shadow_blur = 1.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sun.directional_shadow_max_distance = 200.0
-	root.add_child(sun)
+	_sun = DirectionalLight3D.new()
+	_sun.rotation_degrees = Vector3(-26.0, -40.0, 0.0)
+	_sun.light_angular_distance = 0.5
+	_sun.shadow_enabled = true
+	_sun.shadow_blur = 1.0
+	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	_sun.directional_shadow_max_distance = 200.0
+	root.add_child(_sun)
 	# Where the light goes, on the ground plane (to film the props side-lit).
-	var light := -sun.transform.basis.z
+	var light := -_sun.transform.basis.z
 	_sun_dir = Vector2(light.x, light.z).normalized()
+	_set_light("savanna")
+
+func _set_light(key: String) -> void:
+	var look: Array = LIGHTS[key]
+	var sky_material := _environment.sky.sky_material as ProceduralSkyMaterial
+	sky_material.sky_top_color = look[0]
+	sky_material.sky_horizon_color = look[1]
+	sky_material.ground_horizon_color = look[1]
+	_environment.fog_light_color = (look[1] as Color).darkened(0.02)
+	_environment.ambient_light_color = (look[1] as Color).lerp(Color(0.73, 0.71, 0.68), 0.5)
+	_sun.light_color = look[2]
+	_sun.light_energy = look[3]
 
 ## Title on the hero shot, a small caption on the others.
 func _add_overlay(root: Node3D) -> void:
@@ -224,12 +371,12 @@ func _collect_obstacles() -> void:
 	for node in _terrain.find_children("_Details*", "MultiMeshInstance3D", true, false):
 		var node_name := String(node.name)
 		var reach := 0.0
-		if node_name.contains("Acacia"):
-			reach = 0.55
-		elif node_name.contains("Baobab"):
-			reach = 0.35
-		elif node_name.contains("Termite") or node_name.contains("Dead"):
+		if node_name.contains("Termite") or node_name.contains("Dead") or node_name.contains("Burnt"):
 			reach = 0.3
+		elif node_name.contains("Baobab") or node_name.contains("Big"):
+			reach = 0.35
+		elif node_name.contains("Acacia") or node_name.contains("Tree"):
+			reach = 0.55
 		else:
 			continue
 		var buffer: PackedFloat32Array = (node as MultiMeshInstance3D).multimesh.buffer
@@ -288,7 +435,6 @@ func _along_view(points: Array, t: float, back: float, side: float, lift: float,
 
 func _shots() -> Array[Dictionary]:
 	_collect_obstacles()
-	var half := _world_size * 0.5
 	var rivers: Array = _terrain.get_meta(Meta.RIVERS, [])
 	var roads: Array = _terrain.get_meta(Meta.ROADS, [])
 	var holes: Array = WaterholeStyle.list(_terrain)
@@ -318,8 +464,6 @@ func _shots() -> Array[Dictionary]:
 		_view(hc, hr * 2.1, hr * 0.7, -0.3).merged({"name": "waterhole", "caption": "Dried waterholes with cracked mud"}),
 		_view(acacia, 13.0, 1.8, 3.2).merged({"name": "acacias", "caption": "Biomes: what grows where, with wind"}),
 		_view(baobab, 26.0, 1.8, 5.5).merged({"name": "baobab", "caption": "Built-in low poly props, or your own models"}),
-		{"name": "overview", "caption": "Generate Map: a whole map from a seed", "fov": 45.0,
-			"from": Vector3(-half * 0.9, half * 0.75, half * 0.95), "to": Vector3(0, 0, -half * 0.1)},
 	]
 	return shots
 
@@ -348,10 +492,12 @@ func _pixel_map_panel(out_dir: String) -> void:
 	panel.save_jpg(out_dir + "/pixel_map.jpg", 0.9)
 	print("wrote pixel_map")
 
-## Hero on top, the other shots in a 3 x 2 grid below.
+## Hero on top, the other shots in a 4 x 3 grid below: the savanna, then the
+## other biomes.
 func _sheet(out_dir: String) -> void:
-	var names := ["river", "track", "waterhole", "acacias", "baobab", "overview"]
-	var sheet := Image.create(1920, 1080 + 720, false, Image.FORMAT_RGB8)
+	var names := ["river", "track", "waterhole", "acacias", "baobab", "pixel_map_terrain",
+		"tempere", "desert", "neige", "tropical", "automne", "volcan"]
+	var sheet := Image.create(1920, 1080 + 810, false, Image.FORMAT_RGB8)
 	var hero := Image.load_from_file(out_dir + "/hero.jpg")
 	if hero == null:
 		return
@@ -362,7 +508,7 @@ func _sheet(out_dir: String) -> void:
 		if img == null:
 			continue
 		img.convert(Image.FORMAT_RGB8)
-		img.resize(640, 360, Image.INTERPOLATE_LANCZOS)
-		sheet.blit_rect(img, Rect2i(0, 0, 640, 360), Vector2i((i % 3) * 640, 1080 + (i / 3) * 360))
+		img.resize(480, 270, Image.INTERPOLATE_LANCZOS)
+		sheet.blit_rect(img, Rect2i(0, 0, 480, 270), Vector2i((i % 4) * 480, 1080 + (i / 4) * 270))
 	sheet.save_jpg(out_dir + "/showcase.jpg", 0.88)
 	print("wrote showcase")
