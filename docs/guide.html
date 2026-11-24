@@ -3,26 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Guide · Lowpoly Terrain Editor</title>
+  <title>Guide | Lowpoly Terrain Editor</title>
   <meta name="description" content="How to use the Lowpoly Terrain Editor plugin for Godot 4: tools, Inspector, biomes, vegetation, Generate Map, pixel maps, your own models, in game, lighting and phones.">
-  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+  <link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
+  <a class="skip" href="#main">Skip to content</a>
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="./"><span class="brand-mark" aria-hidden="true"></span>Lowpoly Terrain Editor</a>
+      <a class="brand" href="./"><svg viewBox="0 0 30 22" aria-hidden="true"><path d="M0 22 9 6l6 9z" fill="#b9532a"/><path d="M9 6l6 9 5-9z" fill="#e8c46f"/><path d="M15 15 20 6l10 16z" fill="#3f7a3a"/><path d="M0 22l15-7 15 7z" fill="#2f5f2b"/></svg>Lowpoly Terrain Editor</a>
       <nav class="nav" aria-label="Main">
-        <a href="./">Home</a>
         <a href="guide.html" aria-current="page">Guide</a>
+        <a href="editor.html">Editor tour</a>
         <a href="map-editor.html">Pixel Map Editor</a>
         <a href="https://youtu.be/rg--qJoRvB0" title="Video of the original plugin, by OriginlessGamer">Video</a>
+        <a href="https://github.com/JAC0164/godot-3d-terrain-builder">GitHub</a>
       </nav>
     </div>
   </header>
 
-  <div class="wrap guide">
+  <div class="wrap doc">
     <nav class="toc" aria-label="Guide sections">
-      <p>Guide</p>
+      <details>
+      <summary class="toc-title">Guide sections</summary>
       <ol>
         <li><a href="#install">Installation</a></li>
         <li><a href="#first-terrain">Your first terrain</a></li>
@@ -41,12 +48,16 @@
         <li><a href="#wind">Wind</a></li>
         <li><a href="#props">Built-in props</a></li>
       </ol>
+      </details>
     </nav>
 
-    <main class="content">
+    <main class="content" id="main">
+      <header>
       <h1>Guide</h1>
       <p class="lead">Everything the plugin does, in the order of a first map. Hover any setting in the
-        Inspector for its own explanation. Video walkthrough of the original plugin, by <a href="https://www.youtube.com/@OriginlessGamerApps">OriginlessGamer</a>: <a href="https://youtu.be/rg--qJoRvB0">youtu.be/rg--qJoRvB0</a>.</p>
+        Inspector for its own explanation. Video walkthrough of the original plugin, by <a href="https://www.youtube.com/@OriginlessGamerApps">OriginlessGamer</a>: <a href="https://youtu.be/rg--qJoRvB0">youtu.be/rg--qJoRvB0</a>.
+        For a picture of each part of the plugin's interface, see the <a href="editor.html">editor tour</a>.</p>
+      </header>
 
       <section id="install">
         <h2>Installation</h2>
@@ -65,6 +76,10 @@
         <h2>Your first terrain</h2>
         <p>Create a 3D scene (e.g. a <code>Node3D</code>), select it and click <strong>New Terrain</strong> in the
           3D editor menu bar.</p>
+        <figure class="crop">
+          <img src="editor/toolbar_new.webp" width="328" height="53" alt="New Terrain button in the 3D editor menu bar">
+          <figcaption>With no terrain selected, the menu bar shows only <strong>New Terrain</strong>.</figcaption>
+        </figure>
         <p>The new terrain uses the <strong>Senegal Savanna</strong> biome (<em>Inspector &gt; Look &gt; Biome</em> to
           change it) and is empty: the 3D view says so until you drag in it to add ground (Ground is
           already active), or click <strong>Generate Map</strong> in the Inspector.</p>
@@ -81,6 +96,10 @@
         <h2>Tools and keys</h2>
         <p>The tools are 7 icons in the 3D editor menu bar, shown once a terrain is selected (hover one for
           its name). Undo / Redo: <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>.</p>
+        <figure class="crop crop-scroll">
+          <img src="editor/toolbar_ground.webp" width="1206" height="53" alt="The plugin's toolbar: New Terrain, Ground with its style list, Relief, Flatten, Road, River, Waterhole, Vegetation with its list, brush size, strength and a status message">
+          <figcaption>From the left: New Terrain, Ground and its ground style, Relief, Flatten, Road, River, Waterhole, Vegetation and what it paints, brush size, strength, then a status message.</figcaption>
+        </figure>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Tool</th><th>Drag</th><th>Ctrl + drag</th></tr></thead>
@@ -121,6 +140,10 @@
       <section id="inspector">
         <h2>The Inspector</h2>
         <p>The terrain Inspector has four short sections, in the order of a first map:</p>
+        <figure class="crop crop-side">
+          <img src="editor/inspector_sections.webp" width="347" height="977" loading="lazy" alt="The LowPoly Terrain panel with its sections closed: Map, Look, Roads, Rivers and Waterholes, Game, Advanced">
+          <figcaption>The panel, sections closed.</figcaption>
+        </figure>
         <div class="table-wrap">
           <table>
             <tbody>
@@ -157,11 +180,15 @@
         <p>The biome's <strong>detail layers</strong> say what grows, how dense, on which ground and slope. You can
           make your own biomes from code too: the test project's <code>tools/trial_biomes.gd</code> builds
           desert, snow, volcanic, tropical and autumn biomes with the built-in meshes (see the
-          <a href="./#biomes">gallery</a>).</p>
+          <a href="./#biomes-title">gallery</a>).</p>
       </section>
 
       <section id="vegetation">
         <h2>Vegetation</h2>
+        <figure class="crop">
+          <img src="editor/viewport_vegetation.webp" width="1204" height="830" loading="lazy" alt="The Vegetation brush ring over the savanna, labelled Vegetation + (all plants) 4.0 m 100%">
+          <figcaption>The Vegetation ring says what it paints, its size and strength.</figcaption>
+        </figure>
         <p>On a generated map, the biome's layers grow by themselves. On ground painted by hand nothing grows
           until you use the <strong>Vegetation</strong> tool (tree icon, last in the toolbar).</p>
         <ul>
@@ -368,8 +395,24 @@ func new_level() -&gt; void:
     </main>
   </div>
 
-  <footer>
-    <div class="wrap">Lowpoly Terrain Editor 0.0.1 by Galsen Games Studio, based on the original plugin by <a href="https://www.youtube.com/@OriginlessGamerApps">OriginlessGamer</a>.</div>
+  <footer class="site-foot">
+    <svg class="ridge to-night" viewBox="0 0 1440 84" preserveAspectRatio="none" aria-hidden="true">
+      <path class="f1" d="M0 84V60l120-26 100 20 110-38 90 30 120-18 100 28 110-40 100 26 120-30 90 22 110-14 100 30 90-22 80 16v56z"/>
+      <path class="f2" d="M330 16l90 30-50 38zM760 6l100 26-60 52zM1100 14l90 22-50 48z"/>
+    </svg>
+    <div class="foot-body">
+      <div class="wrap foot-grid">
+        <p><span class="foot-name">Lowpoly Terrain Editor 0.0.1</span><br>by Galsen Games Studio, based on the original plugin by
+          <a href="https://www.youtube.com/@OriginlessGamerApps">OriginlessGamer</a>.</p>
+        <nav aria-label="Footer">
+          <a href="./">Home</a>
+          <a href="editor.html">Editor tour</a>
+          <a href="map-editor.html">Pixel Map Editor</a>
+          <a href="https://github.com/JAC0164/godot-3d-terrain-builder">GitHub</a>
+        </nav>
+      </div>
+    </div>
   </footer>
+  <script src="assets/site.js?v=4" defer></script>
 </body>
 </html>

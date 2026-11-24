@@ -30,3 +30,7 @@ desktop.ini
 # Trial scenes rebuilt by their tools (build_savanna_from_image.gd, build_mountains_from_image.gd)
 /test_project/scenes/savane_image.tscn
 /test_project/scenes/montagnes_image.tscn
+
+# Showcase renders without captions (render_showcase.gd --clean=1): the site uses
+# their WebP copies in docs/img/ (tools/site_images.py)
+/docs/showcase/clean/

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editor tour | Lowpoly Terrain Editor</title>
+  <meta name="description" content="What the Lowpoly Terrain Editor plugin adds to the Godot 4 editor: the toolbar in the 3D menu bar, the brush rings in the 3D view, the terrain Inspector and the biome.">
+  <meta name="theme-color" content="#eef1f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141a26" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+  <link rel="stylesheet" href="assets/style.css?v=4">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="./"><svg viewBox="0 0 30 22" aria-hidden="true"><path d="M0 22 9 6l6 9z" fill="#b9532a"/><path d="M9 6l6 9 5-9z" fill="#e8c46f"/><path d="M15 15 20 6l10 16z" fill="#3f7a3a"/><path d="M0 22l15-7 15 7z" fill="#2f5f2b"/></svg>Lowpoly Terrain Editor</a>
+      <nav class="nav" aria-label="Main">
+        <a href="guide.html">Guide</a>
+        <a href="editor.html" aria-current="page">Editor tour</a>
+        <a href="map-editor.html">Pixel Map Editor</a>
+        <a href="https://youtu.be/rg--qJoRvB0" title="Video of the original plugin, by OriginlessGamer">Video</a>
+        <a href="https://github.com/JAC0164/godot-3d-terrain-builder">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="wrap doc">
+    <nav class="toc" aria-label="Tour sections">
+      <details>
+        <summary class="toc-title">Editor tour</summary>
+        <ol>
+          <li><a href="#window">The whole window</a></li>
+          <li><a href="#empty">A new terrain</a></li>
+          <li><a href="#toolbar">The toolbar</a></li>
+          <li><a href="#rings">Brush rings</a></li>
+          <li><a href="#inspector">The Inspector</a></li>
+          <li><a href="#biome">The biome</a></li>
+        </ol>
+      </details>
+    </nav>
+
+    <main class="content content-wide" id="main">
+      <header>
+        <h1>Editor tour</h1>
+        <p class="lead">What the plugin adds to the Godot editor, captured in Godot 4.7.2 on a map made with
+          <strong>Generate Map</strong> (Senegal Savanna preset, seed 7). The <a href="guide.html">guide</a>
+          explains each setting in full.</p>
+      </header>
+
+      <section id="window">
+        <h2>The whole window</h2>
+        <p>Nothing opens in a separate window: the tools sit in the 3D editor menu bar, the brush draws in the
+          3D view and the settings fill the Inspector.</p>
+        <figure class="shot">
+          <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="shot-body">
+            <img src="editor/editor.webp" width="1920" height="1080" alt="The Godot editor with a generated savanna terrain selected. Numbered markers point to the parts described below.">
+            <span class="pin" style="left:19.95%;top:13.2%" aria-hidden="true">1</span>
+            <span class="pin" style="left:26.0%;top:13.2%" aria-hidden="true">2</span>
+            <span class="pin" style="left:33.5%;top:13.2%" aria-hidden="true">3</span>
+            <span class="pin" style="left:39.8%;top:13.2%" aria-hidden="true">4</span>
+            <span class="pin" style="left:47.9%;top:13.2%" aria-hidden="true">5</span>
+            <span class="pin" style="left:59.6%;top:13.2%" aria-hidden="true">6</span>
+            <span class="pin" style="left:69.5%;top:13.2%" aria-hidden="true">7</span>
+            <span class="pin" style="left:38.2%;top:65.4%" aria-hidden="true">8</span>
+            <span class="pin" style="left:92.4%;top:23.3%" aria-hidden="true">9</span>
+            <span class="pin" style="left:83.0%;top:39.8%" aria-hidden="true">10</span>
+            <span class="pin" style="left:15.9%;top:22.9%" aria-hidden="true">11</span>
+          </div>
+        </figure>
+        <ol class="legend">
+          <li><div><strong>New Terrain</strong><span>Adds a terrain to the open scene. Next to the tools it is only an icon.</span></div></li>
+          <li><div><strong>Ground</strong><span>Paints ground. The list beside it picks the ground style from the biome.</span></div></li>
+          <li><div><strong>Relief and Flatten</strong><span>Raise the ground (<kbd>Ctrl</kbd> to dig), or level it to the height under the click.</span></div></li>
+          <li><div><strong>Road, River, Waterhole</strong><span>Tracks that follow the ground, rivers that carve their bed, dried waterholes.</span></div></li>
+          <li><div><strong>Vegetation</strong><span>Paints plants, or places one tree or prop per click. The list picks what.</span></div></li>
+          <li><div><strong>Brush size and strength</strong><span>Also <kbd>[</kbd> <kbd>]</kbd> and <kbd>-</kbd> <kbd>=</kbd> in the 3D view.</span></div></li>
+          <li><div><strong>Status</strong><span>What the plugin did last: the map seed, a build in progress.</span></div></li>
+          <li><div><strong>Brush ring</strong><span>Where the tool acts, with its name, size and strength.</span></div></li>
+          <li><div><strong>LowPoly Terrain panel</strong><span>Map, Look, Roads, Rivers &amp; Waterholes, Game and Advanced.</span></div></li>
+          <li><div><strong>Generate Map</strong><span>A whole map from the preset and the seed above it.</span></div></li>
+          <li><div><strong>_LowpolyTerrainRuntime</strong><span>Rebuilds and streams the terrain in game. Keep this child node.</span></div></li>
+        </ol>
+      </section>
+
+      <section id="empty">
+        <h2>A new terrain</h2>
+        <p>Click <strong>New Terrain</strong> and the terrain is empty, with Ground already active. A line at the
+          top of the 3D view says what to do until there is ground: drag to paint, or generate a map.</p>
+        <figure class="shot">
+          <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="shot-body">
+            <img src="editor/editor_new_terrain.webp" width="1920" height="1080" loading="lazy" alt="An empty terrain in the Godot editor: the 3D view shows the hint Empty terrain: drag in the view to add ground, or Inspector &gt; Generate Map">
+          </div>
+        </figure>
+      </section>
+
+      <section id="toolbar">
+        <h2>The toolbar</h2>
+        <p>It lives in the 3D editor menu bar and follows the selection. Hover any icon in Godot for its name
+          and keys.</p>
+        <figure class="crop">
+          <img src="editor/toolbar_new.webp" width="328" height="53" loading="lazy" alt="Only the New Terrain button">
+          <figcaption>No terrain selected: only <strong>New Terrain</strong>.</figcaption>
+        </figure>
+        <figure class="crop crop-scroll">
+          <img src="editor/toolbar_ground.webp" width="1206" height="53" loading="lazy" alt="Toolbar with Ground active and the Dry Grass style picked">
+          <figcaption><strong>Ground</strong> active: the list beside it holds the biome's ground styles (here Dry Grass).</figcaption>
+        </figure>
+        <figure class="crop crop-scroll">
+          <img src="editor/toolbar_relief.webp" width="1206" height="53" loading="lazy" alt="Toolbar with Relief active">
+          <figcaption><strong>Relief</strong> active: size and strength both apply.</figcaption>
+        </figure>
+        <figure class="crop crop-scroll">
+          <img src="editor/toolbar_river.webp" width="1206" height="53" loading="lazy" alt="Toolbar with River active; the size field shows 3.4 and the strength field is greyed out">
+          <figcaption><strong>River</strong> active: the size field is the width of the next river, strength is not used.</figcaption>
+        </figure>
+        <figure class="crop crop-scroll">
+          <img src="editor/toolbar_vegetation.webp" width="1206" height="53" loading="lazy" alt="Toolbar with Vegetation active and All plants picked">
+          <figcaption><strong>Vegetation</strong> active: paint all plants, or pick one layer of the biome (acacias, rocks, termite mounds).</figcaption>
+        </figure>
+      </section>
+
+      <section id="rings">
+        <h2>Brush rings</h2>
+        <p>The ring follows the mouse over the ground. The inner ring marks half strength, and the label
+          gives the tool, its size and strength. With Ground, <kbd>Ctrl</kbd>+drag over a road or a river turns it
+          orange: that road or river would be erased.</p>
+        <div class="rings">
+          <figure><img src="editor/ring_relief.webp" width="480" height="360" loading="lazy" alt="Relief ring with an up arrow, labelled Relief 3.0 m 100%"><figcaption><strong>Relief</strong>: raises the ground.</figcaption></figure>
+          <figure><img src="editor/ring_vegetation.webp" width="480" height="360" loading="lazy" alt="Vegetation ring with a plus sign, labelled Vegetation + (all plants) 4.0 m 100%"><figcaption><strong>Vegetation</strong>: more plants here.</figcaption></figure>
+          <figure><img src="editor/ring_river.webp" width="480" height="360" loading="lazy" alt="River ring labelled River 3.3 m wide"><figcaption><strong>River</strong>: the width of the river you draw.</figcaption></figure>
+        </div>
+      </section>
+
+      <section id="inspector">
+        <h2>The Inspector</h2>
+        <p>Select the terrain and the Inspector opens on the <strong>LowPoly Terrain</strong> panel. Its sections
+          follow a first map, top to bottom; the rarely used settings wait in Advanced. Every setting has a tooltip.</p>
+        <div class="panels">
+          <figure><img src="editor/inspector_map.webp" width="347" height="977" loading="lazy" alt="Map section: Map Preset, Map Seed, Generate Map, Random Seed + Generate, Terrain Size"><figcaption><strong>Map</strong>: preset, seed, Generate Map.</figcaption></figure>
+          <figure><img src="editor/inspector_look.webp" width="347" height="977" loading="lazy" alt="Look section: Biome, Edit Biome, Copy Biome to This Terrain, Show Details, Detail Density, Smooth Ground, Ground Bumps, Ground Material, Detail Material"><figcaption><strong>Look</strong>: biome, details, smooth ground, your materials.</figcaption></figure>
+          <figure><img src="editor/inspector_roads.webp" width="347" height="977" loading="lazy" alt="Roads, Rivers and Waterholes section"><figcaption><strong>Roads, Rivers &amp; Waterholes</strong>: what the tools draw next.</figcaption></figure>
+          <figure><img src="editor/inspector_game.webp" width="347" height="977" loading="lazy" alt="Game section"><figcaption><strong>Game</strong>: collision, runtime build, draw distance, phones.</figcaption></figure>
+          <figure><img src="editor/inspector_advanced.webp" width="347" height="977" loading="lazy" alt="Advanced section with its groups: Terrain Size, Shading, Heights and Offsets, Custom Ground Style, Road Look, River Water, Waterhole Shape, Details, Pixel Map"><figcaption><strong>Advanced</strong>: size, shading, looks, pixel map.</figcaption></figure>
+        </div>
+      </section>
+
+      <section id="biome">
+        <h2>The biome</h2>
+        <p><strong>Look &gt; Edit Biome</strong> opens the terrain's biome in the Inspector: its ground styles, the
+          detail layers that say what grows where, the baked shading and the waterhole colours. Changes show
+          on the terrain at once. A biome file is shared by every terrain that uses it; <strong>Copy Biome to
+          This Terrain</strong> gives one terrain its own copy.</p>
+        <figure class="crop">
+          <img src="editor/inspector_biome.webp" width="347" height="977" loading="lazy" class="tall" alt="The Senegal Savanna biome in the Inspector: Name, Ground Styles, Detail Layers, Baked Shading, Waterholes">
+          <figcaption>The Senegal Savanna biome. See <a href="guide.html#biomes">Biomes</a> and <a href="guide.html#vegetation">Vegetation</a> in the guide.</figcaption>
+        </figure>
+      </section>
+    </main>
+  </div>
+
+  <footer class="site-foot">
+    <svg class="ridge to-night" viewBox="0 0 1440 84" preserveAspectRatio="none" aria-hidden="true">
+      <path class="f1" d="M0 84V60l120-26 100 20 110-38 90 30 120-18 100 28 110-40 100 26 120-30 90 22 110-14 100 30 90-22 80 16v56z"/>
+      <path class="f2" d="M330 16l90 30-50 38zM760 6l100 26-60 52zM1100 14l90 22-50 48z"/>
+    </svg>
+    <div class="foot-body">
+      <div class="wrap foot-grid">
+        <p><span class="foot-name">Lowpoly Terrain Editor 0.0.1</span><br>by Galsen Games Studio, based on the original plugin by
+          <a href="https://www.youtube.com/@OriginlessGamerApps">OriginlessGamer</a>.</p>
+        <nav aria-label="Footer">
+          <a href="./">Home</a>
+          <a href="guide.html">Guide</a>
+          <a href="map-editor.html">Pixel Map Editor</a>
+          <a href="https://github.com/JAC0164/godot-3d-terrain-builder">GitHub</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+  <script src="assets/site.js?v=4" defer></script>
+</body>
+</html>

@@ -9,7 +9,9 @@ extends SceneTree
 ## terrain" (assets/pixel_maps) and a contact sheet. The lighting is the
 ## showcase's, not the plugin's (each game lights its own scenes). Real
 ## window, kept off screen:
-##   godot --path . --rendering-method forward_plus --position -3000,-3000 --resolution 1920x1080 --script res://tools/render_showcase.gd -- [--seed=7] [--only=hero,river]
+##   godot --path . --rendering-method forward_plus --position -3000,-3000 --resolution 1920x1080 --script res://tools/render_showcase.gd -- [--seed=7] [--only=hero,river] [--clean=1]
+## --clean=1: no title or caption on the images (the site writes its own),
+## written to docs/showcase/clean/, no contact sheet.
 
 const ADDON := "res://addons/lowpoly_terrain_editor/"
 const Meta = preload(ADDON + "core/terrain_meta.gd")
@@ -25,6 +27,7 @@ const OUT := "res://../docs/showcase"
 const RECIPE := ADDON + "generation/presets/senegal_savanna_map.tres"
 
 var _terrain: Node3D
+var _clean := false
 var _heights: PackedFloat32Array
 var _resolution := 0
 var _world_size := 0.0
@@ -58,7 +61,7 @@ const MAPS := {
 }
 
 func _initialize() -> void:
-	var args := {"seed": "7", "only": ""}
+	var args := {"seed": "7", "only": "", "clean": "0"}
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.trim_prefix("--").split("=", true, 1)
 		if parts.size() == 2:
@@ -101,7 +104,8 @@ func _initialize() -> void:
 	root.add_child(camera)
 	camera.current = true
 
-	var out_dir := ProjectSettings.globalize_path(OUT).simplify_path()
+	_clean = args["clean"] == "1"
+	var out_dir := ProjectSettings.globalize_path(OUT + ("/clean" if _clean else "")).simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var only: PackedStringArray = String(args["only"]).split(",", false)
 	var shots := _shots()
@@ -121,15 +125,17 @@ func _initialize() -> void:
 	_set_light("savanna")
 	if only.is_empty() or only.has("pixel_map"):
 		await _pixel_map_shot(root, camera, out_dir)
-		_pixel_map_panel(out_dir)
-	_sheet(out_dir)
+		if not _clean:
+			_pixel_map_panel(out_dir)
+	if not _clean:
+		_sheet(out_dir)
 	quit(0)
 
 func _capture(camera: Camera3D, shot: Dictionary, out_dir: String) -> void:
 	camera.fov = shot.get("fov", 55.0)
 	camera.look_at_from_position(shot["from"], shot["to"])
-	_title.visible = shot["name"] == "hero"
-	_caption_box.visible = not _title.visible
+	_title.visible = shot["name"] == "hero" and not _clean
+	_caption_box.visible = shot["name"] != "hero" and not _clean
 	_caption.text = shot["caption"]
 	for f in range(30):
 		await RenderingServer.frame_post_draw
@@ -252,7 +258,7 @@ func _pixel_map_shot(root: Node3D, camera: Camera3D, out_dir: String) -> void:
 	camera.fov = 42.0
 	camera.look_at_from_position(Vector3(0, 62, 92), Vector3(0, -2, 4))
 	_title.visible = false
-	_caption_box.visible = true
+	_caption_box.visible = not _clean
 	_caption.text = "Generate from Image: one pixel = one terrain cell"
 	for f in range(30):
 		await RenderingServer.frame_post_draw
