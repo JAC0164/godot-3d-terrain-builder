@@ -37,8 +37,6 @@ if you already have the "addons" folder, you can drag and drop / copy only the "
    The terrain data (heights, ground styles) is stored compressed in the scene (the "_LowpolyTerrainRuntime" child unpacks it when the scene loads: keep that node). With "Save everything", most of the size of a generated map is the saved meshes / details / collision (about 19 MB of text for a 193 savanna map, 160 KB with "All at runtime").
    "Runtime Build" (Inspector > Game) chooses what the scene file stores: "All at runtime" (default for new terrains: only the terrain data, a few hundred KB; meshes, details, roads and collision are rebuilt when the scene opens or the game starts, spread over frames), "Details at runtime", or "Save everything" (biggest scene, fastest loading; terrains made before this version keep this mode).
 
-7. Full "How-to" video: https://youtu.be/rg--qJoRvB0
-
 
 =====
 map_generator.html is a bonus file which allows you to generate island pixel maps. It opens in your browser. You can also paint pixel maps manually.

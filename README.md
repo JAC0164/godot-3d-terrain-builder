@@ -32,5 +32,4 @@ Godot **4.7** (tested with 4.7.2), Forward+, Mobile and Compatibility renderers.
 ## Credits
 
 Version 0.0.1 by Galsen Games Studio, based on the original Lowpoly Terrain Editor (1.0) by
-[OriginlessGamer](https://www.youtube.com/@OriginlessGamerApps)
-([video of the original plugin](https://youtu.be/rg--qJoRvB0)).
+[OriginlessGamer](https://www.youtube.com/@OriginlessGamerApps).
