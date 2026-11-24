@@ -1,0 +1,10 @@
+config_version=5
+
+[application]
+
+config/name="lte_smoke"
+config/features=PackedStringArray("4.7")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/lowpoly_terrain_editor/plugin.cfg", "res://addons/lte_harness/plugin.cfg")

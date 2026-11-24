@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="LowpolyMapRecipe" format=3]
+
+[ext_resource type="Resource" path="res://addons/lowpoly_terrain_editor/biomes/presets/temperate.tres" id="1_ucr8m"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_patch.gd" id="2_pudeh"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_recipe.gd" id="3_v8kg2"]
+
+[resource]
+script = ExtResource("3_v8kg2")
+name = "Temperate Island"
+biome = ExtResource("1_ucr8m")
+island = 0.7
+coast_noise = 0.6
+base_style = "Grass"
+relief = 0.8
+relief_scale = 40.0
+plateau_style = "Rock"
+plateau_coverage = 0.18
+plateau_height = 4.0
+plateau_scale = 30.0
+plateau_smoothness = 2.0
+lowland_style = "Sand"
+lowland_coverage = 0.08
+lowland_depth = 0.5
+track_color = Color(0.55, 0.45, 0.32, 1)
+waterholes_per_10k_cells = 0.0

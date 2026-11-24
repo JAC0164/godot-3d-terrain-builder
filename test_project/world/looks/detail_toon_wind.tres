@@ -1,0 +1,13 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://world/looks/detail_toon_wind.gdshader" id="1_6dkk0"]
+
+[resource]
+resource_name = "detail toon wind"
+render_priority = 0
+shader = ExtResource("1_6dkk0")
+shader_parameter/wind_direction = null
+shader_parameter/height = null
+shader_parameter/strength = null
+shader_parameter/speed = null
+shader_parameter/stiffness = null

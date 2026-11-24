@@ -1,0 +1,16 @@
+[gd_scene format=3]
+
+[ext_resource type="Environment" path="res://world/open_world_environment.tres" id="1_8qbtw"]
+
+[node name="OpenWorldSky" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = ExtResource("1_8qbtw")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.81915675, 0.23329182, -0.52398201, 0, 0.91354546, 0.40673664, 0.57356972, -0.33318107, 0.74833693, 0, 20, 0)
+light_color = Color(1, 0.86, 0.68, 1)
+light_energy = 1.55
+shadow_enabled = true
+directional_shadow_mode = 1
+directional_shadow_max_distance = 50.0

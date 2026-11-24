@@ -1,0 +1,66 @@
+[gd_resource type="Resource" script_class="LowpolyTerrainBiome" format=3]
+
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/biomes/detail_layer.gd" id="1_7tew2"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/biomes/ground_style.gd" id="2_pha7l"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/biomes/terrain_biome.gd" id="3_kmdl4"]
+
+[sub_resource type="Resource" id="Resource_gq083"]
+script = ExtResource("1_7tew2")
+name = "Grass"
+slope_max = 34.0
+slope_fade = 16.0
+ground_filter = 1
+filter_styles = PackedInt32Array()
+sink = 0.05
+tint = Color(0.92, 1.06, 0.7, 1)
+
+[sub_resource type="Resource" id="Resource_160dv"]
+script = ExtResource("1_7tew2")
+name = "Rocks"
+builtin_mesh = 2
+density = 0.021
+steep_bonus = 7.0
+edge_bonus = 5.7
+filter_styles = PackedInt32Array()
+cell_margin = 0.1
+scale_min = 0.55
+scale_max = 1.45
+small_bias = 2.0
+height_scale_min = 0.55
+height_scale_max = 1.0
+stretch_max = 1.25
+max_tilt = 14.0
+sink = 0.25
+color_mode = 1
+brightness = 0.975
+brightness_jitter = 0.13
+desaturate = 0.5
+lighten = 0.12
+
+[sub_resource type="Resource" id="Resource_jq1pr"]
+script = ExtResource("2_pha7l")
+name = "Grass"
+
+[sub_resource type="Resource" id="Resource_ukyro"]
+script = ExtResource("2_pha7l")
+name = "Rock"
+top_color = Color(0.48, 0.47, 0.45, 1)
+side_color = Color(0.36, 0.35, 0.34, 1)
+
+[sub_resource type="Resource" id="Resource_hm4kh"]
+script = ExtResource("2_pha7l")
+name = "Sand"
+top_color = Color(0.83, 0.74, 0.52, 1)
+side_color = Color(0.62, 0.52, 0.36, 1)
+
+[sub_resource type="Resource" id="Resource_858hk"]
+script = ExtResource("2_pha7l")
+name = "Snow"
+top_color = Color(0.93, 0.95, 0.98, 1)
+side_color = Color(0.55, 0.57, 0.62, 1)
+
+[resource]
+script = ExtResource("3_kmdl4")
+name = "Temperate"
+ground_styles = Array[ExtResource("2_pha7l")]([SubResource("Resource_jq1pr"), SubResource("Resource_ukyro"), SubResource("Resource_hm4kh"), SubResource("Resource_858hk")])
+detail_layers = Array[ExtResource("1_7tew2")]([SubResource("Resource_gq083"), SubResource("Resource_160dv")])

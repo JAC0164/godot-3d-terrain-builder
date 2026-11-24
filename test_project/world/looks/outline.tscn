@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Shader" path="res://world/looks/outline.gdshader" id="1_2ctsm"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wiidq"]
+render_priority = 0
+shader = ExtResource("1_2ctsm")
+shader_parameter/line_color = null
+shader_parameter/threshold = null
+shader_parameter/width = null
+shader_parameter/fade_start = null
+shader_parameter/fade_end = null
+
+[sub_resource type="QuadMesh" id="QuadMesh_a3fg0"]
+size = Vector2(2, 2)
+
+[node name="Outline" type="MeshInstance3D" unique_id=599704673]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1)
+material_override = SubResource("ShaderMaterial_wiidq")
+cast_shadow = 0
+extra_cull_margin = 16384.0
+mesh = SubResource("QuadMesh_a3fg0")

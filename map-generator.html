@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Map Generator</title>
+    <style>
+        :root {
+            --bg-color: #1e1e24;
+            --panel-color: #2b2b36;
+            --text-color: #e0e0e0;
+            --accent-color: #4CAF50;
+            --accent-hover: #45a049;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 320px;
+            background-color: var(--panel-color);
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background-color: #121215;
+            overflow: auto;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        input[type="number"], select {
+            width: 100%;
+            padding: 8px;
+            background: #1e1e24;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .custom-res {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .custom-res div {
+            flex: 1;
+        }
+
+        /* Color Controls */
+        .color-block {
+            background-color: #22222a;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #555;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .color-block.white { border-left-color: #FFFFFF; }
+        .color-block.blue { border-left-color: #0000FF; }
+        .color-block.green { border-left-color: #00FF00; }
+        .color-block.red { border-left-color: #FF0000; }
+
+        .color-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+        
+        input[type="range"] {
+            flex-grow: 1;
+            accent-color: var(--accent-color);
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 4px;
+            text-transform: uppercase;
+            transition: background-color 0.2s;
+            margin-top: 5px;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        #exportBtn {
+            background-color: #2196F3;
+        }
+
+        #exportBtn:hover {
+            background-color: #1976D2;
+        }
+
+        .canvas-container {
+            background-image: linear-gradient(45deg, #333 25%, transparent 25%), 
+                              linear-gradient(-45deg, #333 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #333 75%), 
+                              linear-gradient(-45deg, transparent 75%, #333 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            border: 2px solid #444;
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>Resolution</h2>
+        <div class="control-group">
+            <select id="templateSelect">
+                <option value="16">16x16</option>
+                <option value="32">32x32</option>
+                <option value="48">48x48</option>
+                <option value="96" selected>96x96</option>
+                <option value="128">128x128</option>
+                <option value="256">256x256</option>
+                <option value="custom">Custom</option>
+            </select>
+            
+            <div id="customResGroup" class="custom-res" style="display: none;">
+                <div>
+                    <small>Width</small>
+                    <input type="number" id="customWidth" value="64" min="1" max="256">
+                </div>
+                <div>
+                    <small>Height</small>
+                    <input type="number" id="customHeight" value="64" min="1" max="256">
+                </div>
+            </div>
+        </div>
+
+        <h2>Map Constraints</h2>
+        <div class="control-group">
+            <label style="display:flex; justify-content:space-between; align-items:center; font-size: 0.9rem;">
+                <span>Island Padding</span>
+                <span id="paddingVal" style="font-weight:bold; color:var(--accent-color);">50%</span>
+            </label>
+            <div class="slider-row">
+                <!-- 0 = Fill Canvas completely (touches borders), 100 = Small strictly contained island -->
+                <input type="range" id="islandPadding" min="0" max="100" value="50">
+            </div>
+        </div>
+
+        <h2>Colors & Weights</h2>
+        
+        <div class="color-block white">
+            <div class="color-header">
+                <input type="checkbox" id="cbWhite" checked> 
+                <label for="cbWhite">White (Water / Empty)</label>
+            </div>
+            <div class="slider-row">
+                <span>Amount:</span>
+                <input type="range" id="weightWhite" min="1" max="100" value="15">
+            </div>
+        </div>
+
+        <div class="color-block blue">
+            <div class="color-header">
+                <input type="checkbox" id="cbBlue" checked> 
+                <label for="cbBlue">Blue (Cavity / Dent)</label>
+            </div>
+            <div class="slider-row">
+                <span>Amount:</span>
+                <input type="range" id="weightBlue" min="1" max="100" value="10">
+            </div>
+        </div>
+
+        <div class="color-block green">
+            <div class="color-header">
+                <input type="checkbox" id="cbGreen" checked> 
+                <label for="cbGreen">Green (Ground)</label>
+            </div>
+            <div class="slider-row">
+                <span>Amount:</span>
+                <input type="range" id="weightGreen" min="1" max="100" value="50">
+            </div>
+        </div>
+
+        <div class="color-block red">
+            <div class="color-header">
+                <input type="checkbox" id="cbRed" checked> 
+                <label for="cbRed">Red (Raised / Mountain)</label>
+            </div>
+            <div class="slider-row">
+                <span>Amount:</span>
+                <input type="range" id="weightRed" min="1" max="100" value="25">
+            </div>
+        </div>
+
+        <div style="flex-grow: 1;"></div>
+
+        <button id="generateBtn">Generate</button>
+        <button id="exportBtn">Export PNG</button>
+    </div>
+
+    <div class="main-content">
+        <div class="canvas-container">
+            <canvas id="mapCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const templateSelect = document.getElementById('templateSelect');
+        const customResGroup = document.getElementById('customResGroup');
+        const canvas = document.getElementById('mapCanvas');
+        const islandPaddingSlider = document.getElementById('islandPadding');
+        const paddingValLabel = document.getElementById('paddingVal');
+        
+        // Exact assigned color definitions
+        const COLORS = {
+            White: [255, 255, 255, 255], // #FFFFFF
+            Blue:  [0, 0, 255, 255],     // #0000FF
+            Green: [0, 255, 0, 255],     // #00FF00
+            Red:   [255, 0, 0, 255]      // #FF0000
+        };
+
+        // UI Event Listeners
+        templateSelect.addEventListener('change', (e) => {
+            customResGroup.style.display = (e.target.value === 'custom') ? 'flex' : 'none';
+        });
+
+        islandPaddingSlider.addEventListener('input', (e) => {
+            paddingValLabel.textContent = e.target.value + '%';
+        });
+
+        function getResolution() {
+            if (templateSelect.value === 'custom') {
+                return {
+                    w: Math.max(1, Math.min(256, parseInt(document.getElementById('customWidth').value) || 1)),
+                    h: Math.max(1, Math.min(256, parseInt(document.getElementById('customHeight').value) || 1))
+                };
+            }
+            const val = parseInt(templateSelect.value);
+            return { w: val, h: val };
+        }
+
+        // Generate cellular multi-pass noise
+        function generateSmoothNoise(width, height, passes) {
+            let data = new Float32Array(width * height);
+            
+            // Random initialization
+            for (let i = 0; i < data.length; i++) data[i] = Math.random();
+
+            // Smooth passes
+            for (let p = 0; p < passes; p++) {
+                let next = new Float32Array(width * height);
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let sum = 0, count = 0;
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                let nx = x + dx, ny = y + dy;
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                    sum += data[ny * width + nx];
+                                    count++;
+                                }
+                            }
+                        }
+                        next[y * width + x] = sum / count;
+                    }
+                }
+                data = next;
+            }
+
+            // Normalize 0.0 - 1.0
+            let min = Infinity, max = -Infinity;
+            for (let i = 0; i < data.length; i++) {
+                if (data[i] < min) min = data[i];
+                if (data[i] > max) max = data[i];
+            }
+            for (let i = 0; i < data.length; i++) {
+                data[i] = (data[i] - min) / (max - min);
+            }
+
+            return data;
+        }
+
+        function generateMap() {
+            const { w, h } = getResolution();
+            canvas.width = w;
+            canvas.height = h;
+
+            const scale = Math.max(1, Math.floor(512 / Math.max(w, h)));
+            canvas.style.width = `${w * scale}px`;
+            canvas.style.height = `${h * scale}px`;
+
+            // Gather active colors and their weights
+            const activeColors = [];
+            let totalWeight = 0;
+
+            const config = [
+                { id: 'White', color: COLORS.White },
+                { id: 'Blue', color: COLORS.Blue },
+                { id: 'Green', color: COLORS.Green },
+                { id: 'Red', color: COLORS.Red }
+            ];
+
+            for (let c of config) {
+                if (document.getElementById(`cb${c.id}`).checked) {
+                    let weight = parseInt(document.getElementById(`weight${c.id}`).value) || 0;
+                    if (weight > 0) {
+                        activeColors.push({ color: c.color, weight: weight });
+                        totalWeight += weight;
+                    }
+                }
+            }
+
+            if (activeColors.length === 0 || totalWeight === 0) {
+                alert("Please enable at least one color and set its amount above 0!");
+                return;
+            }
+
+            // Convert raw weights into cumulative thresholds from 0.0 to 1.0
+            const thresholds = [];
+            let currentThreshold = 0;
+            for (let ac of activeColors) {
+                currentThreshold += (ac.weight / totalWeight);
+                thresholds.push({ color: ac.color, limit: currentThreshold });
+            }
+
+            const ctx = canvas.getContext('2d');
+            const imgData = ctx.createImageData(w, h);
+            
+            // Generate Heightmap Noise
+            const smoothingPasses = Math.floor(Math.max(w, h) / 8) + 5; 
+            const noise = generateSmoothNoise(w, h, smoothingPasses);
+
+            const padding = parseInt(islandPaddingSlider.value) / 100.0;
+
+            for (let i = 0; i < noise.length; i++) {
+                let value = noise[i];
+
+                // Algorithm Upgrade: Island Padding Math
+                // Applies a natural exponential drop-off based on distance from center
+                if (padding > 0) {
+                    let x = i % w;
+                    let y = Math.floor(i / w);
+                    
+                    // Convert to normalized space (-1.0 to 1.0)
+                    let nx = (x / Math.max(1, w - 1)) * 2 - 1;
+                    let ny = (y / Math.max(1, h - 1)) * 2 - 1;
+                    
+                    // Circular distance from center
+                    let dist = Math.sqrt(nx*nx + ny*ny); 
+                    
+                    // The higher the padding, the sharper and wider the boundary penalty
+                    let exp = 1.0 + (1.0 - padding) * 5.0; 
+                    let penalty = Math.pow(dist, exp) * (0.5 + padding * 1.5);
+                    
+                    value = value - penalty;
+                    value = Math.max(0, value); // Clamp to 0
+                }
+
+                // Determine pixel color based on the customized thresholds
+                let chosenColor = thresholds[thresholds.length - 1].color; // Default to highest limit
+                for (let t of thresholds) {
+                    if (value <= t.limit) {
+                        chosenColor = t.color;
+                        break;
+                    }
+                }
+                
+                // Write pixel
+                const pixelIndex = i * 4;
+                imgData.data[pixelIndex]     = chosenColor[0]; 
+                imgData.data[pixelIndex + 1] = chosenColor[1]; 
+                imgData.data[pixelIndex + 2] = chosenColor[2]; 
+                imgData.data[pixelIndex + 3] = chosenColor[3]; 
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function exportImage() {
+            const link = document.createElement('a');
+            link.download = `terrain-map-${canvas.width}x${canvas.height}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        document.getElementById('generateBtn').addEventListener('click', generateMap);
+        document.getElementById('exportBtn').addEventListener('click', exportImage);
+        
+        // Listen to live slider/checkbox changes to regenerate automatically
+        document.querySelectorAll('input[type="range"], input[type="checkbox"]').forEach(el => {
+            el.addEventListener('change', generateMap);
+        });
+
+        // Initialize
+        generateMap();
+    </script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="LowpolyMapRecipe" format=3]
+
+[ext_resource type="Resource" path="res://addons/lowpoly_terrain_editor/biomes/presets/senegal_savanna.tres" id="1_5gqmh"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_patch.gd" id="2_237jo"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_recipe.gd" id="3_lxubg"]
+
+[sub_resource type="Resource" id="Resource_8tgn8"]
+script = ExtResource("2_237jo")
+style = "Laterite"
+coverage = 0.08
+scale = 14.0
+
+[sub_resource type="Resource" id="Resource_wcnjq"]
+script = ExtResource("2_237jo")
+coverage = 0.035
+scale = 26.0
+
+[sub_resource type="Resource" id="Resource_wsf0s"]
+script = ExtResource("2_237jo")
+style = "Sand"
+coverage = 0.05
+scale = 10.0
+
+[resource]
+script = ExtResource("3_lxubg")
+name = "Senegal Savanna"
+biome = ExtResource("1_5gqmh")
+size = 192
+relief = 0.45
+relief_scale = 60.0
+plateau_coverage = 0.12
+plateau_height = 2.2
+plateau_scale = 40.0
+plateau_smoothness = 2.5
+lowland_coverage = 0.12
+lowland_depth = 0.7
+lowland_scale = 30.0
+lowland_smoothness = 5.0
+patches = Array[ExtResource("2_237jo")]([SubResource("Resource_8tgn8"), SubResource("Resource_wcnjq"), SubResource("Resource_wsf0s")])
+track_count = 2
+track_meander = 0.55
+waterholes_per_10k_cells = 1.6
+waterhole_radius_max = 8.0

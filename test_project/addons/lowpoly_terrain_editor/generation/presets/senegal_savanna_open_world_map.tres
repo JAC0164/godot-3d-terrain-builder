@@ -1,0 +1,61 @@
+[gd_resource type="Resource" script_class="LowpolyMapRecipe" format=3]
+
+[ext_resource type="Resource" path="res://addons/lowpoly_terrain_editor/biomes/presets/senegal_savanna.tres" id="1_bcrrv"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_patch.gd" id="2_76i2a"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_recipe.gd" id="3_xm607"]
+
+[sub_resource type="Resource" id="Resource_341e2"]
+script = ExtResource("2_76i2a")
+style = "Green Savanna"
+coverage = 0.14
+scale = 220.0
+
+[sub_resource type="Resource" id="Resource_mdcdj"]
+script = ExtResource("2_76i2a")
+style = "Dry Clay"
+scale = 160.0
+
+[sub_resource type="Resource" id="Resource_r6rde"]
+script = ExtResource("2_76i2a")
+style = "Laterite"
+coverage = 0.04
+scale = 24.0
+
+[sub_resource type="Resource" id="Resource_ro365"]
+script = ExtResource("2_76i2a")
+coverage = 0.04
+scale = 40.0
+
+[sub_resource type="Resource" id="Resource_sbl0s"]
+script = ExtResource("2_76i2a")
+style = "Sand"
+coverage = 0.04
+scale = 12.0
+
+[resource]
+script = ExtResource("3_xm607")
+name = "Senegal Open World"
+biome = ExtResource("1_bcrrv")
+size = 1024
+cell_size = 1.5
+border = 1
+border_width = 48.0
+border_height = 9.0
+border_noise = 0.6
+relief = 0.9
+relief_scale = 140.0
+plateau_coverage = 0.1
+plateau_height = 3.0
+plateau_scale = 110.0
+lowland_coverage = 0.12
+lowland_depth = 0.9
+lowland_scale = 60.0
+lowland_smoothness = 6.0
+patches = Array[ExtResource("2_76i2a")]([SubResource("Resource_341e2"), SubResource("Resource_mdcdj"), SubResource("Resource_r6rde"), SubResource("Resource_ro365"), SubResource("Resource_sbl0s")])
+river_count = 2
+river_width = 4.0
+river_depth = 0.9
+track_count = 4
+track_network = true
+track_network_stops = 10
+waterholes_per_10k_cells = 0.6

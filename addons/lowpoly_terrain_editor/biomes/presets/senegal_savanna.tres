@@ -1,0 +1,316 @@
+[gd_resource type="Resource" script_class="LowpolyTerrainBiome" format=3]
+
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/biomes/detail_layer.gd" id="1_nfdfb"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/biomes/ground_style.gd" id="2_uryci"]
+[ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/biomes/terrain_biome.gd" id="3_l4iqv"]
+
+[sub_resource type="Resource" id="Resource_0ipt5"]
+script = ExtResource("1_nfdfb")
+name = "Dry Grass"
+builtin_mesh = 3
+density = 1.2
+clump_size = 7.0
+clump_coverage = 0.7
+slope_max = 32.0
+slope_fade = 10.0
+ground_filter = 2
+filter_color = Color(0.74, 0.62, 0.36, 1)
+filter_tolerance = 0.28
+filter_styles = PackedInt32Array()
+scale_min = 0.9
+scale_max = 1.5
+height_scale_max = 1.4
+sink = 0.05
+tint = Color(1.05, 0.98, 0.78, 1)
+brightness = 1.05
+brightness_jitter = 0.12
+draw_distance = 50.0
+
+[sub_resource type="Resource" id="Resource_5f7l6"]
+script = ExtResource("1_nfdfb")
+name = "Green Grass"
+density = 0.6
+slope_max = 30.0
+slope_fade = 12.0
+ground_filter = 2
+filter_color = Color(0.55, 0.6, 0.28, 1)
+filter_styles = PackedInt32Array()
+sink = 0.05
+tint = Color(0.92, 1.06, 0.7, 1)
+draw_distance = 50.0
+
+[sub_resource type="Resource" id="Resource_upaxa"]
+script = ExtResource("1_nfdfb")
+name = "Laterite Gravel"
+builtin_mesh = 4
+density = 0.18
+ground_filter = 2
+filter_color = Color(0.7, 0.36, 0.2, 1)
+filter_tolerance = 0.22
+filter_styles = PackedInt32Array()
+scale_min = 0.6
+scale_max = 1.2
+small_bias = 1.5
+max_tilt = 10.0
+sink = 0.15
+brightness = 0.78
+desaturate = 0.15
+draw_distance = 50.0
+
+[sub_resource type="Resource" id="Resource_2rhr8"]
+script = ExtResource("1_nfdfb")
+name = "Rocks"
+builtin_mesh = 2
+density = 0.015
+steep_bonus = 8.0
+edge_bonus = 6.0
+filter_styles = PackedInt32Array()
+cell_margin = 0.1
+scale_min = 0.55
+scale_max = 1.45
+small_bias = 2.0
+height_scale_min = 0.55
+height_scale_max = 1.0
+stretch_max = 1.25
+max_tilt = 14.0
+sink = 0.25
+color_mode = 1
+brightness = 1.4
+brightness_jitter = 0.13
+desaturate = 0.55
+lighten = 0.1
+
+[sub_resource type="Resource" id="Resource_w4spv"]
+script = ExtResource("1_nfdfb")
+name = "Shrubs"
+builtin_mesh = 5
+density = 0.035
+clump_size = 9.0
+clump_coverage = 0.45
+slope_max = 28.0
+filter_styles = PackedInt32Array()
+scale_min = 0.9
+scale_max = 1.8
+small_bias = 1.5
+height_scale_min = 0.7
+height_scale_max = 1.1
+stretch_max = 1.3
+sink = 0.05
+color_mode = 2
+tint = Color(0.95, 0.88, 0.7, 1)
+brightness_jitter = 0.12
+draw_distance = 120.0
+
+[sub_resource type="Resource" id="Resource_smx1x"]
+script = ExtResource("1_nfdfb")
+name = "Acacias"
+builtin_mesh = 6
+density = 0.006
+clump_size = 16.0
+slope_max = 22.0
+filter_styles = PackedInt32Array()
+cell_margin = 0.2
+scale_min = 3.5
+scale_max = 6.0
+small_bias = 1.3
+height_scale_min = 0.85
+height_scale_max = 1.15
+stretch_max = 1.25
+max_tilt = 4.0
+sink = 0.02
+color_mode = 2
+brightness_jitter = 0.1
+draw_distance = 300.0
+cast_shadows = true
+collision_radius = 0.045
+collision_height = 0.7
+
+[sub_resource type="Resource" id="Resource_yhg27"]
+script = ExtResource("1_nfdfb")
+name = "Baobabs"
+builtin_mesh = 7
+density = 0.001
+slope_max = 18.0
+filter_styles = PackedInt32Array()
+cell_margin = 0.3
+scale_min = 5.0
+scale_max = 7.5
+small_bias = 1.2
+height_scale_min = 0.9
+height_scale_max = 1.15
+stretch_max = 1.15
+sink = 0.03
+color_mode = 2
+draw_distance = 400.0
+cast_shadows = true
+collision_radius = 0.22
+collision_height = 0.7
+
+[sub_resource type="Resource" id="Resource_cen0j"]
+script = ExtResource("1_nfdfb")
+name = "Termite Mounds"
+builtin_mesh = 8
+density = 0.004
+clump_size = 20.0
+slope_max = 20.0
+filter_styles = PackedInt32Array()
+cell_margin = 0.15
+scale_min = 1.2
+scale_max = 2.6
+small_bias = 1.6
+height_scale_max = 1.3
+max_tilt = 3.0
+sink = 0.08
+color_mode = 2
+tint = Color(0.78, 0.45, 0.28, 1)
+draw_distance = 160.0
+collision_radius = 0.4
+collision_height = 0.85
+
+[sub_resource type="Resource" id="Resource_dh2lg"]
+script = ExtResource("1_nfdfb")
+name = "Zebu Skulls"
+builtin_mesh = 9
+density = 0.0015
+slope_max = 15.0
+filter_styles = PackedInt32Array()
+cell_margin = 0.15
+scale_min = 0.55
+scale_max = 0.75
+height_scale_min = 1.0
+height_scale_max = 1.0
+max_tilt = 12.0
+sink = 0.15
+color_mode = 2
+brightness_jitter = 0.06
+draw_distance = 45.0
+
+[sub_resource type="Resource" id="Resource_750hc"]
+script = ExtResource("1_nfdfb")
+name = "Waterhole Reeds"
+builtin_mesh = 3
+density = 0.9
+clump_size = 4.0
+clump_coverage = 0.45
+slope_max = 35.0
+filter_styles = PackedInt32Array()
+waterhole_zone = 2
+scale_min = 1.0
+scale_max = 1.5
+height_scale_min = 1.6
+height_scale_max = 2.4
+sink = 0.05
+color_mode = 2
+tint = Color(0.8, 0.7, 0.48, 1)
+brightness_jitter = 0.12
+draw_distance = 60.0
+
+[sub_resource type="Resource" id="Resource_iiefh"]
+script = ExtResource("1_nfdfb")
+name = "Waterhole Skulls"
+builtin_mesh = 9
+density = 0.035
+slope_max = 30.0
+filter_styles = PackedInt32Array()
+waterhole_zone = 2
+cell_margin = 0.15
+scale_min = 0.5
+scale_max = 0.75
+height_scale_min = 1.0
+height_scale_max = 1.0
+max_tilt = 22.0
+sink = 0.15
+color_mode = 2
+brightness_jitter = 0.06
+draw_distance = 50.0
+
+[sub_resource type="Resource" id="Resource_wndas"]
+script = ExtResource("1_nfdfb")
+name = "Dead Trees"
+builtin_mesh = 10
+density = 0.012
+slope_max = 30.0
+filter_styles = PackedInt32Array()
+waterhole_zone = 2
+cell_margin = 0.25
+scale_min = 2.2
+scale_max = 4.0
+height_scale_min = 0.85
+stretch_max = 1.2
+max_tilt = 10.0
+sink = 0.03
+color_mode = 2
+brightness_jitter = 0.1
+draw_distance = 200.0
+collision_radius = 0.065
+
+[sub_resource type="Resource" id="Resource_44m4b"]
+script = ExtResource("1_nfdfb")
+name = "Basin Bones"
+builtin_mesh = 9
+density = 0.006
+filter_styles = PackedInt32Array()
+waterhole_zone = 3
+cell_margin = 0.2
+scale_min = 0.5
+scale_max = 0.65
+height_scale_min = 1.0
+height_scale_max = 1.0
+max_tilt = 25.0
+sink = 0.12
+color_mode = 2
+brightness_jitter = 0.05
+draw_distance = 50.0
+
+[sub_resource type="Resource" id="Resource_vueqb"]
+script = ExtResource("2_uryci")
+name = "Dry Grass"
+top_color = Color(0.74, 0.62, 0.36, 1)
+side_color = Color(0.58, 0.4, 0.24, 1)
+
+[sub_resource type="Resource" id="Resource_5g64y"]
+script = ExtResource("2_uryci")
+name = "Laterite"
+top_color = Color(0.7, 0.36, 0.2, 1)
+side_color = Color(0.55, 0.27, 0.16, 1)
+
+[sub_resource type="Resource" id="Resource_skfx2"]
+script = ExtResource("2_uryci")
+name = "Green Savanna"
+top_color = Color(0.55, 0.6, 0.28, 1)
+side_color = Color(0.5, 0.32, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_edry4"]
+script = ExtResource("2_uryci")
+name = "Sand"
+top_color = Color(0.86, 0.76, 0.55, 1)
+side_color = Color(0.7, 0.56, 0.38, 1)
+
+[sub_resource type="Resource" id="Resource_f5fd4"]
+script = ExtResource("2_uryci")
+name = "Dry Clay"
+top_color = Color(0.62, 0.52, 0.42, 1)
+side_color = Color(0.48, 0.38, 0.3, 1)
+
+[sub_resource type="Resource" id="Resource_cmqol"]
+script = ExtResource("2_uryci")
+name = "Burnt Ground"
+top_color = Color(0.3, 0.26, 0.22, 1)
+side_color = Color(0.4, 0.28, 0.2, 1)
+
+[resource]
+script = ExtResource("3_l4iqv")
+name = "Senegal Savanna"
+ground_styles = Array[ExtResource("2_uryci")]([SubResource("Resource_vueqb"), SubResource("Resource_5g64y"), SubResource("Resource_skfx2"), SubResource("Resource_edry4"), SubResource("Resource_f5fd4"), SubResource("Resource_cmqol")])
+detail_layers = Array[ExtResource("1_nfdfb")]([SubResource("Resource_0ipt5"), SubResource("Resource_5f7l6"), SubResource("Resource_upaxa"), SubResource("Resource_2rhr8"), SubResource("Resource_w4spv"), SubResource("Resource_smx1x"), SubResource("Resource_yhg27"), SubResource("Resource_cen0j"), SubResource("Resource_dh2lg"), SubResource("Resource_750hc"), SubResource("Resource_iiefh"), SubResource("Resource_wndas"), SubResource("Resource_44m4b")])
+blend = 2
+blend_noise = 0.75
+slope_tint = 0.6
+slope_start = 28.0
+slope_end = 48.0
+ambient_occlusion = 0.45
+variation = 0.09
+cliff_darken = 0.3
+cliff_lip = 0.12
+waterhole_clay_color = Color(0.64, 0.48, 0.34, 1)
+waterhole_crack_color = Color(0.3, 0.19, 0.13, 1)
