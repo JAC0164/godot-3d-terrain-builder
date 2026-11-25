@@ -180,7 +180,11 @@ func _make_visible(visible: bool) -> void:
 
 ## Rebuilds the meshes when geometry settings were changed from outside the
 ## plugin's own controls (e.g. the raw metadata editor).
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# Button held with the mouse still: the brush keeps working in place.
+	if _strokes.is_stroke_active() and is_instance_valid(_active_terrain):
+		_strokes.hold(_active_terrain, delta)
+		_queue_stroke_flush()
 	if _brush_settings_save_at_ms >= 0 and Time.get_ticks_msec() >= _brush_settings_save_at_ms:
 		_save_brush_settings()
 	if _inspector_refresh_at_ms >= 0 and Time.get_ticks_msec() >= _inspector_refresh_at_ms:

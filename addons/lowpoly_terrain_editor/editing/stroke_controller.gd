@@ -30,6 +30,11 @@ const WaterholeStyle = preload("../styles/waterhole_style.gd")
 ## further apart are filled in, so a quick stroke leaves no holes.
 const STAMP_SPACING := 0.35
 const MAX_STAMPS_PER_SAMPLE := 64
+## Brush stamps per second while the button is held with the mouse still
+## (hold to keep raising / digging / painting in place).
+const HOLD_STAMPS_PER_SECOND := 20.0
+## Most held stamps per call, so a slow frame does not pile up a big jump.
+const MAX_HOLD_STAMPS := 3
 
 var mode: ToolMode.Mode = ToolMode.Mode.NONE
 var brush_radius := 3.0
@@ -56,6 +61,9 @@ var _stroke_has_dirty_rect := false
 var _max_expand_warned_this_stroke := false
 ## Last brush stamp (Vector2) of the stroke, null before the first.
 var _last_stamp: Variant = null
+## Brush position of the last stamp (local space) and the time since it.
+var _last_hit := Vector3.ZERO
+var _hold_time := 0.0
 ## Chunk meshes to rebuild at the next flush (Vector2i -> true). With the
 ## Vegetation brush: chunks whose details to re-scatter (no mesh change).
 var _pending_chunks: Dictionary = {}
@@ -96,6 +104,7 @@ func begin(terrain: Node3D, local_position: Vector3) -> void:
 	_stroke_has_dirty_rect = false
 	_max_expand_warned_this_stroke = false
 	_last_stamp = null
+	_hold_time = 0.0
 	_pending_chunks.clear()
 	_stroke_chunks.clear()
 	_canvas_expanded = false
@@ -143,6 +152,8 @@ func update(terrain: Node3D, local_position: Vector3) -> void:
 			builder.show_preview(terrain, FeatureStyle.make_preview(terrain, _feature_type(), _feature_points))
 		return
 
+	# The mouse moved: hold() waits a full interval again.
+	_hold_time = 0.0
 	# Fill the gap since the last stamp (fast mouse moves).
 	if _last_stamp != null:
 		var from: Vector2 = _last_stamp
@@ -152,6 +163,22 @@ func update(terrain: Node3D, local_position: Vector3) -> void:
 			var stamp := from.lerp(point, float(i) / float(count))
 			apply_brush(terrain, Vector3(stamp.x, local_position.y, stamp.y))
 	apply_brush(terrain, local_position)
+
+## Called every frame during a stroke: while the button is held with the
+## mouse still, the brush keeps stamping where it is, HOLD_STAMPS_PER_SECOND
+## times a second (moving the mouse stamps through update() instead).
+func hold(terrain: Node3D, delta: float) -> void:
+	if not _stroke_active or _last_stamp == null or _erase_feature_stroke or not ToolMode.is_brush_tool(mode):
+		return
+	_hold_time += delta
+	var interval := 1.0 / HOLD_STAMPS_PER_SECOND
+	var stamps := 0
+	while _hold_time >= interval and stamps < MAX_HOLD_STAMPS:
+		_hold_time -= interval
+		stamps += 1
+		apply_brush(terrain, _last_hit)
+	# A long frame: drop the stamps beyond the cap instead of catching up.
+	_hold_time = minf(_hold_time, interval)
 
 ## Rebuilds the chunk meshes (and the road / river mesh) changed since the
 ## last flush. Cheap to call when nothing is pending.
@@ -369,6 +396,7 @@ func apply_brush(terrain: Node3D, local_position: Vector3) -> void:
 
 	var target_pos := _to_2d(local_position)
 	_last_stamp = target_pos
+	_last_hit = local_position
 	if ToolMode.is_vegetation_tool(mode):
 		if Brush.apply_vegetation(terrain, mode, target_pos, brush_radius, brush_strength, vegetation_target):
 			_accumulate_dirty_rect(target_pos, brush_radius + 1.0)

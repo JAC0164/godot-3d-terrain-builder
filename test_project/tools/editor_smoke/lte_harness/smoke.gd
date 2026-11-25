@@ -16,6 +16,12 @@ func _frames(n: int) -> void:
 	for i in range(n):
 		await get_tree().process_frame
 
+func _peak(heights: PackedFloat32Array) -> float:
+	var peak := -INF
+	for h in heights:
+		peak = maxf(peak, h)
+	return peak
+
 func _find(node: Node, node_name: String) -> Node:
 	if node.name == node_name:
 		return node
@@ -157,6 +163,20 @@ func _run() -> void:
 	plugin._toolbar_redo()
 	await _frames(2)
 	check("redo reapplies mask", terrain.get_meta("_lte_mask") == mask_after)
+
+	# Relief held with the mouse still keeps raising (no motion event).
+	var heights_before: PackedFloat32Array = (terrain.get_meta("_lte_heights") as PackedFloat32Array).duplicate()
+	plugin._strokes.mode = 3
+	plugin._strokes.begin(terrain, Vector3(0, 0, 0))
+	var peak_click := _peak(terrain.get_meta("_lte_heights"))
+	await get_tree().create_timer(0.5).timeout
+	var peak_held := _peak(terrain.get_meta("_lte_heights"))
+	plugin._strokes.end(terrain)
+	plugin._strokes.mode = plugin._tool
+	check("relief held still keeps raising (%.2f -> %.2f m)" % [peak_click, peak_held], peak_held > peak_click + 0.4)
+	plugin._toolbar_undo()
+	await _frames(2)
+	check("undo lowers the held relief", terrain.get_meta("_lte_heights") == heights_before)
 
 	# Viewport input path with a real camera looking down at the terrain.
 	var camera := Camera3D.new()
