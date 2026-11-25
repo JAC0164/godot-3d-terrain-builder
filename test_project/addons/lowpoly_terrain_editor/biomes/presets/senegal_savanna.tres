@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LowpolyTerrainBiome" format=3]
+[gd_resource type="Resource" script_class="LowpolyTerrainBiome" format=3 uid="uid://d0hslf5rs5x8v"]
 
 [ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/biomes/detail_layer.gd" id="1_nfdfb"]
 [ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/biomes/ground_style.gd" id="2_uryci"]

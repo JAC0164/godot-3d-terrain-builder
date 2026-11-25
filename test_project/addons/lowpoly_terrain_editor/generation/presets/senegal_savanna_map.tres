@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="LowpolyMapRecipe" format=3]
+[gd_resource type="Resource" script_class="LowpolyMapRecipe" format=3 uid="uid://bv1kx3f1ufyys"]
 
-[ext_resource type="Resource" path="res://addons/lowpoly_terrain_editor/biomes/presets/senegal_savanna.tres" id="1_5gqmh"]
+[ext_resource type="Resource" uid="uid://d0hslf5rs5x8v" path="res://addons/lowpoly_terrain_editor/biomes/presets/senegal_savanna.tres" id="1_5gqmh"]
 [ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_patch.gd" id="2_237jo"]
 [ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_recipe.gd" id="3_lxubg"]
 

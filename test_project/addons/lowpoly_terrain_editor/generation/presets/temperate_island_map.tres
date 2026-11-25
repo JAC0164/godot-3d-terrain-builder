@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="LowpolyMapRecipe" format=3]
+[gd_resource type="Resource" script_class="LowpolyMapRecipe" format=3 uid="uid://catnjp7jyql1y"]
 
-[ext_resource type="Resource" path="res://addons/lowpoly_terrain_editor/biomes/presets/temperate.tres" id="1_ucr8m"]
+[ext_resource type="Resource" uid="uid://bqmxs1kxth80s" path="res://addons/lowpoly_terrain_editor/biomes/presets/temperate.tres" id="1_ucr8m"]
 [ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_patch.gd" id="2_pudeh"]
 [ext_resource type="Script" path="res://addons/lowpoly_terrain_editor/generation/map_recipe.gd" id="3_v8kg2"]
 
