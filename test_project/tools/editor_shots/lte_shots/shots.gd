@@ -96,7 +96,7 @@ func _open_section(title: String) -> void:
 	for child in panel.get_children():
 		if child is Button and (child as Button).toggle_mode and (child as Button).flat:
 			var button := child as Button
-			button.button_pressed = button.text.substr(2) == title
+			button.button_pressed = button.text == title
 	await _frames(6)
 
 func _ring(mode: int, at: Vector2 = Vector2(0.5, 0.55)) -> void:

@@ -147,7 +147,7 @@ func _run() -> void:
 	var titles: Array = []
 	for child in panel.get_children():
 		if child is Button and child.toggle_mode and child.flat:
-			titles.append((child as Button).text.substr(2))
+			titles.append((child as Button).text)
 	check("inspector sections %s" % [titles], titles == ["Map", "Look", "Roads, Rivers & Waterholes", "Game", "Advanced"])
 	var paragraphs := panel.find_children("*", "Label", true, false).filter(func(l): return (l as Label).autowrap_mode != TextServer.AUTOWRAP_OFF)
 	check("no help paragraphs (%d)" % paragraphs.size(), paragraphs.is_empty())

@@ -22,8 +22,6 @@ const MapPresets = preload("../generation/map_presets.gd")
 const ToolMode = preload("../editing/tool_mode.gd")
 const LowpolyTerrainPlugin = preload("../plugin.gd")
 
-const LABEL_MIN_WIDTH := 90.0
-const COLOR_PICKER_SIZE := Vector2(90.0, 28.0)
 
 var host: LowpolyTerrainPlugin
 ## Remembers foldout states across Inspector rebuilds (keyed by title).
@@ -42,10 +40,7 @@ func _parse_begin(object: Object) -> void:
 	var panel := VBoxContainer.new()
 	panel.name = "LowPoly Terrain"
 
-	var title := Label.new()
-	title.text = "LowPoly Terrain"
-	title.add_theme_font_size_override("font_size", roundi(16.0 * _scale()))
-	panel.add_child(title)
+	_add_category(panel, "LowPoly Terrain")
 
 	# Four short sections in the order of a first map, then everything else
 	# in a closed "Advanced". No paragraphs: every explanation is a tooltip
@@ -168,20 +163,22 @@ func _add_map_preset_row(section: VBoxContainer, terrain: Node3D) -> void:
 	if custom:
 		option.select(custom_index)
 
+	var recipe_row := _add_row(section, "Recipe", tooltip)
+	recipe_row.visible = custom
 	var picker := EditorResourcePicker.new()
 	picker.base_type = "LowpolyMapRecipe"
 	picker.edited_resource = current
 	picker.tooltip_text = tooltip
-	picker.visible = custom
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	picker.resource_changed.connect(_plain_setter(terrain, Meta.MAP_RECIPE))
 	# Deferred: switching the Inspector frees this panel.
 	picker.resource_selected.connect(func(resource: Resource, _inspect: bool) -> void: EditorInterface.edit_resource.call_deferred(resource))
-	section.add_child(picker)
+	recipe_row.add_child(picker)
 
 	option.item_selected.connect(func(index: int) -> void:
 		if not is_instance_valid(terrain):
 			return
-		picker.visible = index == custom_index
+		recipe_row.visible = index == custom_index
 		if index != custom_index:
 			Meta.set_optional(terrain, Meta.MAP_RECIPE, presets[index])
 			picker.edited_resource = presets[index])
@@ -206,18 +203,16 @@ func _build_look_section(panel: VBoxContainer, terrain: Node3D) -> void:
 	var biome_tip := ("The terrain's theme: ground styles, shading, waterhole colors, what grows on it, your own ground / detail / road / water materials and the ambience (Environment). Empty = built-in Temperate. "
 		+ "Edit it in its own Inspector: the terrain updates at once, cells painted with a ground style follow it.\nGround styles (list next to the Ground tool): %s.\nWhat grows: %s." % [
 			", ".join(style_names) if not style_names.is_empty() else "none", ", ".join(layer_names) if not layer_names.is_empty() else "nothing"])
-	var label := Label.new()
-	label.text = "Biome"
-	label.tooltip_text = biome_tip
-	section.add_child(label)
+	var biome_row := _add_row(section, "Biome", biome_tip)
 	var picker := EditorResourcePicker.new()
 	picker.base_type = "LowpolyTerrainBiome"
 	picker.edited_resource = biome
 	picker.tooltip_text = biome_tip
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	picker.resource_changed.connect(func(resource: Resource) -> void: host.set_biome(terrain, resource))
 	# Deferred: switching the Inspector frees this panel.
 	picker.resource_selected.connect(func(resource: Resource, _inspect: bool) -> void: EditorInterface.edit_resource.call_deferred(resource))
-	section.add_child(picker)
+	biome_row.add_child(picker)
 
 	if biome == null:
 		_add_button(section, "Create Editable Biome", "Put an editable copy of the built-in Temperate biome in this terrain (save it as a .tres from its Inspector to reuse it).",
@@ -445,26 +440,60 @@ func _add_generator_style_choice(parent: VBoxContainer, terrain: Node3D, title: 
 # Widgets
 # -----------------------------------------------------------------------------
 
-## Editor display scale (fonts and fixed sizes follow it).
-func _scale() -> float:
-	return EditorInterface.get_editor_scale() if Engine.is_editor_hint() else 1.0
-
 ## Foldout whose title explains the section in its tooltip.
 func _edit_biome_tip(shared: bool) -> String:
 	if shared:
 		return "Open the biome in the Inspector. It is a file shared by every terrain that uses it: your edits change them all (Copy Biome to This Terrain to change this one only)."
 	return "Open the biome in the Inspector. It is stored in this scene: your edits change this terrain only."
 
+## Godot's own editor theme: the panel uses the same arrows, fonts, colours
+## and widgets as the native Inspector (EditorInspectorCategory /
+## EditorInspectorSection / EditorProperty), so it reads as part of it.
+func _editor_theme() -> Theme:
+	return EditorInterface.get_editor_theme()
+
+## Title bar like a native Inspector category (class name over a band).
+func _add_category(parent: VBoxContainer, text: String) -> void:
+	var theme := _editor_theme()
+	var band := PanelContainer.new()
+	band.add_theme_stylebox_override("panel", theme.get_stylebox("bg", "EditorInspectorCategory"))
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", theme.get_font("bold", "EditorFonts"))
+	label.add_theme_font_size_override("font_size", theme.get_font_size("bold_size", "EditorFonts"))
+	band.add_child(label)
+	parent.add_child(band)
+
 func _add_section(parent: VBoxContainer, title_text: String, expanded: bool, tooltip: String) -> VBoxContainer:
 	return _add_foldout(parent, title_text, expanded, tooltip)
 
+## Foldout like a native Inspector group: tree arrow, bold title, indented
+## content. Its title explains the section in its tooltip.
 func _add_foldout(parent: VBoxContainer, title_text: String, expanded: bool = false, tooltip: String = "") -> VBoxContainer:
+	var theme := _editor_theme()
 	var header := Button.new()
+	header.text = title_text
 	header.tooltip_text = tooltip
 	header.toggle_mode = true
 	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	header.flat = true
 	header.focus_mode = Control.FOCUS_NONE
+	header.add_theme_font_override("font", theme.get_font("bold", "EditorFonts"))
+	header.add_theme_font_size_override("font_size", theme.get_font_size("bold_size", "EditorFonts"))
+	var color := theme.get_color("font_color", "EditorInspectorSection")
+	for state: String in ["font_color", "font_pressed_color", "font_hover_pressed_color"]:
+		header.add_theme_color_override(state, color)
+	header.add_theme_constant_override("h_separation", theme.get_constant("h_separation", "EditorInspectorSection"))
+	# Button margins make a taller line than a native section title.
+	var margin := 2.0 * EditorInterface.get_editor_scale()
+	for state: String in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
+		var box := theme.get_stylebox(state, "Button").duplicate() as StyleBox
+		box.content_margin_top = margin
+		box.content_margin_bottom = margin
+		header.add_theme_stylebox_override(state, box)
+	# Otherwise sized to the tallest stylebox of all states (disabled...).
+	header.add_theme_constant_override("align_to_largest_stylebox", 0)
 	parent.add_child(header)
 
 	# Godot can rebuild a custom Inspector after changing resources, colours or
@@ -474,30 +503,17 @@ func _add_foldout(parent: VBoxContainer, title_text: String, expanded: bool = fa
 
 	var indent_row := HBoxContainer.new()
 	parent.add_child(indent_row)
-
 	var spacer := Control.new()
-	spacer.custom_minimum_size.x = 12.0 * _scale()
+	spacer.custom_minimum_size.x = float(theme.get_constant("indent_size", "EditorInspectorSection"))
 	indent_row.add_child(spacer)
-
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.visible = initial_open
 	indent_row.add_child(body)
-
-	# Closed sections use a cool accent; the open section a warm/green accent.
-	var closed_color := Color(0.64, 0.82, 1.00)
-	var closed_hover_color := Color(0.78, 0.90, 1.00)
-	var open_color := Color(0.64, 0.93, 0.72)
-	var open_hover_color := Color(0.78, 1.00, 0.84)
 
 	var update_header := func(open: bool) -> void:
 		_foldout_states[title_text] = open
-		header.text = ("▼ " if open else "▶ ") + title_text
-		body.visible = open
-		var color := open_color if open else closed_color
-		header.add_theme_color_override("font_color", color)
-		header.add_theme_color_override("font_pressed_color", color)
-		header.add_theme_color_override("font_hover_color", open_hover_color if open else closed_hover_color)
+		header.icon = theme.get_icon("arrow" if open else "arrow_collapsed", "Tree")
+		indent_row.visible = open
 
 	update_header.call(initial_open)
 	header.toggled.connect(update_header)
@@ -510,13 +526,17 @@ func _add_button(parent: VBoxContainer, text: String, tooltip: String, on_presse
 	button.pressed.connect(on_pressed)
 	parent.add_child(button)
 
+## On / off setting like a native bool property: name on the left, a check
+## box "On" on the right.
 func _add_checkbox(parent: VBoxContainer, text: String, tooltip: String, pressed: bool, on_toggled: Callable) -> void:
+	var row := _add_row(parent, text, tooltip)
 	var check := CheckBox.new()
-	check.text = text
+	check.text = "On"
 	check.tooltip_text = tooltip
 	check.button_pressed = pressed
+	check.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	check.toggled.connect(on_toggled)
-	parent.add_child(check)
+	row.add_child(check)
 
 ## Label + read-only value row.
 func _add_value_row(parent: VBoxContainer, label_text: String, value_text: String, tooltip: String) -> void:
@@ -524,31 +544,36 @@ func _add_value_row(parent: VBoxContainer, label_text: String, value_text: Strin
 	var value := Label.new()
 	value.text = value_text
 	value.tooltip_text = tooltip
-	# Half the row, right-aligned like the number fields (else cut to 48 px).
+	value.mouse_filter = Control.MOUSE_FILTER_PASS
 	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(value)
 
-## Label + control row; returns the row so the caller can add the control.
+## Row like a native property: its name on the left half (property colour),
+## the control the caller adds on the right half (SIZE_EXPAND_FILL).
 func _add_row(parent: VBoxContainer, label_text: String, tooltip: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	var label := Label.new()
 	label.text = label_text
 	label.tooltip_text = tooltip
+	# Labels ignore the mouse by default: no tooltip without this.
+	label.mouse_filter = Control.MOUSE_FILTER_PASS
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.add_theme_color_override("font_color", _editor_theme().get_color("property_color", "EditorProperty"))
 	row.add_child(label)
 	parent.add_child(row)
 	return row
 
-func _add_spin_row(parent: VBoxContainer, label_text: String, tooltip: String, min_value: float, max_value: float, step: float, value: float) -> SpinBox:
+## Number field like a native one (EditorSpinSlider: drag to change, click
+## to type).
+func _add_spin_row(parent: VBoxContainer, label_text: String, tooltip: String, min_value: float, max_value: float, step: float, value: float) -> EditorSpinSlider:
 	var row := _add_row(parent, label_text, tooltip)
-	var spin := SpinBox.new()
+	var spin := EditorSpinSlider.new()
 	spin.min_value = min_value
 	spin.max_value = max_value
 	spin.step = step
 	spin.value = value
 	spin.tooltip_text = tooltip
-	spin.custom_minimum_size.x = LABEL_MIN_WIDTH
+	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spin)
 	return spin
 
@@ -560,31 +585,25 @@ func _add_int_row(parent: VBoxContainer, terrain: Node3D, label_text: String, ke
 	var spin := _add_spin_row(parent, label_text, tooltip, min_value, max_value, 1, Meta.get_int(terrain, key, default_value))
 	spin.value_changed.connect(on_changed)
 
-## `feature_style` pickers edit alpha and keep the default height.
+## `feature_style` pickers edit alpha.
 func _add_color_row(parent: VBoxContainer, terrain: Node3D, label_text: String, key: String, default_value: Color, tooltip: String, on_changed: Callable, feature_style: bool = false) -> void:
 	var row := _add_row(parent, label_text, tooltip)
 	var picker := ColorPickerButton.new()
 	picker.color = terrain.get_meta(key, default_value)
 	picker.tooltip_text = tooltip
-	if feature_style:
-		picker.edit_alpha = true
-		picker.custom_minimum_size.x = LABEL_MIN_WIDTH
-	else:
-		picker.custom_minimum_size = COLOR_PICKER_SIZE
+	picker.edit_alpha = feature_style
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	picker.color_changed.connect(on_changed)
 	row.add_child(picker)
 
 func _add_texture_row(parent: VBoxContainer, terrain: Node3D, label_text: String, key: String, tooltip: String, on_changed: Callable) -> EditorResourcePicker:
-	var label := Label.new()
-	label.text = label_text
-	label.tooltip_text = tooltip
-	parent.add_child(label)
-
+	var row := _add_row(parent, label_text, tooltip)
 	var picker := EditorResourcePicker.new()
 	picker.base_type = "Texture2D"
 	var edited_object: Object = Meta.get_optional(terrain, key)
 	picker.edited_resource = edited_object as Resource
 	picker.tooltip_text = tooltip
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	picker.resource_changed.connect(on_changed)
-	parent.add_child(picker)
+	row.add_child(picker)
 	return picker
