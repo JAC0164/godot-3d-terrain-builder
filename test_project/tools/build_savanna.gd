@@ -81,8 +81,7 @@ func _build(size: int) -> void:
 				cell_styles[cell] = burnt
 	terrain.set_meta(Meta.CELL_STYLES, cell_styles)
 
-	# A red laterite track across the plain.
-	terrain.set_meta(Meta.ROAD_COLOR, Color(0.66, 0.4, 0.26))
+	# A red laterite track across the plain (the biome's road colour).
 	var s := float(size)
 	var points: Array[Vector2] = []
 	for i in range(41):

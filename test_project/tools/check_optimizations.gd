@@ -8,6 +8,8 @@ extends SceneTree
 ##   godot --headless --path . --script res://tools/check_optimizations.gd
 
 const ADDON := "res://addons/lowpoly_terrain_editor/"
+const TerrainBiomeRef = preload(ADDON + "biomes/terrain_biome.gd")
+const MaterialFactoryRef = preload(ADDON + "materials/material_factory.gd")
 const Meta = preload(ADDON + "core/terrain_meta.gd")
 const TerrainData = preload(ADDON + "core/terrain_data.gd")
 const TerrainBiome = preload(ADDON + "biomes/terrain_biome.gd")
@@ -81,15 +83,16 @@ func _initialize() -> void:
 	_check(vc_material.vertex_color_use_as_albedo and vc_material.vertex_color_is_srgb, "vertex-colour material, sRGB")
 
 	# Chunk 1_0 covers x 32..47: sand (untextured) + textured top + its sides.
+	# The textured top goes to the blended surface, even with the baked
+	# shading off.
 	var mesh_10: ArrayMesh = terrain.get_node("%s/Chunk_1_0" % Meta.GENERATED_CHUNKS_NAME).mesh
-	_check(mesh_10.get_surface_count() == 2, "mixed chunk: 1 merged + 1 textured surface (got %d)" % mesh_10.get_surface_count())
-	var textured_material := mesh_10.surface_get_material(1) as StandardMaterial3D
-	_check(textured_material.albedo_texture == texture, "textured surface keeps its texture")
-	_check((mesh_10.surface_get_arrays(1)[Mesh.ARRAY_TEX_UV] as PackedVector2Array).size() > 0, "textured surface has UVs")
+	_check(mesh_10.get_surface_count() == 2 and mesh_10.surface_get_format(1) & Mesh.ARRAY_FORMAT_CUSTOM0, "mixed chunk: 1 merged + 1 blended texture surface (got %d)" % mesh_10.get_surface_count())
+	var textured_material := mesh_10.surface_get_material(1) as ShaderMaterial
+	_check(textured_material != null and textured_material.get_shader_parameter("layer_0") == texture, "blended surface keeps its texture")
 	_check(mesh_10.surface_get_material(0) == vc_material, "vertex-colour material shared between chunks")
 
 	var mesh_11: ArrayMesh = terrain.get_node("%s/Chunk_1_1" % Meta.GENERATED_CHUNKS_NAME).mesh
-	_check(mesh_11.surface_get_material(1) == textured_material, "textured material shared between chunks")
+	_check(mesh_11.surface_get_material(1) == textured_material, "blended texture material shared between chunks")
 
 	# Same geometry as before: one top quad (2 triangles) per active cell.
 	var total_vertices := 0
@@ -117,10 +120,18 @@ func _initialize() -> void:
 	_check(shader_of.call() == "river_water_mobile.gdshader", "Mobile Water: shader without refraction")
 	_check(not (load(ADDON + "materials/river_water_mobile.gdshader") as Shader).code.contains("hint_screen_texture"), "mobile shader does not read the screen")
 	terrain.set_meta(Meta.RIVER_MOBILE_WATER, false)
+	# Water Material of the biome with Refraction Strength 0.
+	var biome: Resource = TerrainBiomeRef.of(terrain).duplicate()
+	var water: ShaderMaterial = MaterialFactoryRef.editable_water_material(Color(0.1, 0.4, 0.5, 0.7))
+	water.set_shader_parameter("refraction_strength", 0.0)
+	biome.set("water_material", water)
+	terrain.set_meta(Meta.BIOME, biome)
+	_check(shader_of.call() == "river_water_mobile.gdshader", "refraction 0: shader without refraction")
 	var rivers: Array = terrain.get_meta(Meta.RIVERS)
+	rivers[0]["color"] = Color(0.1, 0.4, 0.5, 0.7)
 	rivers[0]["refraction"] = 0.0
 	terrain.set_meta(Meta.RIVERS, rivers)
-	_check(shader_of.call() == "river_water_mobile.gdshader", "refraction 0: shader without refraction")
+	_check(shader_of.call() == "river_water_mobile.gdshader", "old river with its own look, refraction 0: shader without refraction")
 
 	terrain.free()
 	print("RESULT: %s (%d failure(s))" % ["OK" if _failures == 0 else "FAILED", _failures])

@@ -34,3 +34,32 @@ extends Resource
 	set(value):
 		side_tile_size = value
 		emit_changed()
+
+@export_subgroup("Surface (optional)")
+## Normal map of the top texture (relief under the light). Empty = flat.
+## A realistic look: albedo + normal + roughness from the same texture set.
+@export var top_normal: Texture2D:
+	set(value):
+		top_normal = value
+		emit_changed()
+## Roughness map of the top texture (red channel; black = shiny, white =
+## matte). Empty = fully matte.
+@export var top_roughness: Texture2D:
+	set(value):
+		top_roughness = value
+		emit_changed()
+## Normal map of the side (cliff) texture. Empty = flat.
+@export var side_normal: Texture2D:
+	set(value):
+		side_normal = value
+		emit_changed()
+## Roughness map of the side (cliff) texture (red channel). Empty = matte.
+@export var side_roughness: Texture2D:
+	set(value):
+		side_roughness = value
+		emit_changed()
+
+## True when a surface texture is set (the ground then uses the PBR variant
+## of its materials).
+func has_surface() -> bool:
+	return top_normal != null or top_roughness != null or side_normal != null or side_roughness != null

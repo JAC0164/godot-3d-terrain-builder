@@ -203,12 +203,15 @@ func _build_biome_map(root: Node3D, entry: Dictionary, map_seed: int) -> void:
 	recipe.set("border_width", 28.0)
 	recipe.set("border_height", 12.0)
 	recipe.set("track_count", map[0])
-	recipe.set("track_color", map[1])
 	recipe.set("river_count", map[2])
 	recipe.set("river_width", 4.5)
 	recipe.set("river_depth", 0.9)
 	recipe.set("waterholes_per_10k_cells", map[3])
 	var stats: Dictionary = MapGenerator.generate(_terrain, recipe, map_seed)
+	# This map's track colour, in a copy of its biome.
+	var themed: Resource = (_terrain.get_meta(Meta.BIOME) as Resource).duplicate()
+	themed.set("road_color", map[1])
+	_terrain.set_meta(Meta.BIOME, themed)
 	print(key, ": ", stats)
 	var builder := TerrainBuilder.new()
 	builder.owner_provider = func() -> Node: return root

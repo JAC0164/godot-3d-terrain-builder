@@ -5,6 +5,7 @@ var _log: Array[String] = []
 
 const DetailScatterRef = preload("res://addons/lowpoly_terrain_editor/mesh/detail_scatter.gd")
 const TerrainMesherRef = preload("res://addons/lowpoly_terrain_editor/mesh/terrain_mesher.gd")
+const TerrainBiomeScript = preload("res://addons/lowpoly_terrain_editor/biomes/terrain_biome.gd")
 
 func _enter_tree() -> void:
 	call_deferred("_run")
@@ -880,24 +881,49 @@ func _run() -> void:
 	await _frames(2)
 	check("undo generate map", int(terrain.get_meta("_lte_resolution")) == res_before_map and not terrain.has_meta("_lte_detail_seed"))
 
-	# Custom Materials (Rendering > Ground Material / Detail Material).
+	# Custom Materials: Ground Material / Detail Material of the biome.
 	var mat_chunks: Node = terrain.get_node("_GeneratedTerrainChunks")
 	var custom_ground := StandardMaterial3D.new()
 	var custom_detail := StandardMaterial3D.new()
 	var colored_before := _colored_surface_materials(mat_chunks)
 	var details_before := _detail_materials(mat_chunks)
-	plugin.set_custom_material(terrain, "_lte_ground_material", custom_ground)
-	plugin.set_custom_material(terrain, "_lte_detail_material", custom_detail)
-	check("custom ground material on every coloured chunk surface (%d)" % colored_before.size(), colored_before.size() > 0 and _colored_surface_materials(mat_chunks).all(func(m): return m == custom_ground))
-	check("custom detail material on every detail node (%d)" % details_before.size(), details_before.size() > 0 and _detail_materials(mat_chunks).all(func(m): return m == custom_detail))
+	var biome_before: Variant = terrain.get_meta("_lte_biome", null)
+	var themed: Resource = TerrainBiomeScript.of(terrain).duplicate()
+	themed.set("ground_material", custom_ground)
+	themed.set("detail_material", custom_detail)
+	terrain.set_meta("_lte_biome", themed)
 	plugin._builder.rebuild_all(terrain)
-	check("custom materials kept by a full rebuild", _colored_surface_materials(mat_chunks).all(func(m): return m == custom_ground) and _detail_materials(mat_chunks).all(func(m): return m == custom_detail))
+	check("biome ground material on every coloured chunk surface (%d)" % colored_before.size(), colored_before.size() > 0 and _colored_surface_materials(mat_chunks).all(func(m): return m == custom_ground))
+	check("biome detail material on every detail node (%d)" % details_before.size(), details_before.size() > 0 and _detail_materials(mat_chunks).all(func(m): return m == custom_detail))
 	await _frames(2)
 	var material_pickers := EditorInterface.get_base_control().find_children("*", "EditorResourcePicker", true, false).filter(func(p): return p.base_type == "Material")
-	check("Inspector shows the two material slots (%d)" % material_pickers.size(), material_pickers.size() == 2)
-	plugin.set_custom_material(terrain, "_lte_ground_material", null)
-	plugin.set_custom_material(terrain, "_lte_detail_material", null)
-	check("cleared: built-in materials back", _colored_surface_materials(mat_chunks) == colored_before and _detail_materials(mat_chunks) == details_before and not terrain.has_meta("_lte_ground_material"))
+	check("terrain Inspector: no material slot, they are in the biome (%d)" % material_pickers.size(), material_pickers.is_empty())
+	if biome_before == null:
+		terrain.remove_meta("_lte_biome")
+	else:
+		terrain.set_meta("_lte_biome", biome_before)
+	plugin._builder.rebuild_all(terrain)
+	check("biome without materials: built-in materials back", _colored_surface_materials(mat_chunks) == colored_before and _detail_materials(mat_chunks) == details_before)
+
+	# Customise Road / Water: an editable material put in the biome, undoable.
+	var own_biome: Resource = TerrainBiomeScript.of(terrain).duplicate(true)
+	terrain.set_meta("_lte_biome", own_biome)
+	plugin.customise_feature_material(terrain, false)
+	plugin.customise_feature_material(terrain, true)
+	var road_mat: Variant = own_biome.get("road_material")
+	var water_mat: Variant = own_biome.get("water_material")
+	check("Customise Road puts an editable road material in the biome", road_mat is StandardMaterial3D)
+	check("Customise Water puts an editable water shader in the biome", water_mat is ShaderMaterial and (water_mat as ShaderMaterial).get_shader_parameter("normal_texture") is NoiseTexture2D)
+	plugin._toolbar_undo()
+	plugin._toolbar_undo()
+	check("undo Customise: biome materials empty again", own_biome.get("road_material") == null and own_biome.get("water_material") == null)
+	await _frames(2)
+	if biome_before == null:
+		terrain.remove_meta("_lte_biome")
+	else:
+		terrain.set_meta("_lte_biome", biome_before)
+	EditorInterface.edit_node(terrain)
+	await _frames(2)
 
 	# Step 5: the Level JSON menu is gone; old scenes lose their level path.
 	check("no Level menu in the toolbar", toolbar.find_children("*", "MenuButton", true, false).is_empty() and not FileAccess.file_exists("res://addons/lowpoly_terrain_editor/io/level_serializer.gd"))

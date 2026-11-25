@@ -44,6 +44,7 @@ extends Node
 const Meta = preload("../core/terrain_meta.gd")
 const NodeNames = preload("../core/node_names.gd")
 const TerrainData = preload("../core/terrain_data.gd")
+const TerrainBiome = preload("../biomes/terrain_biome.gd")
 const StylePalette = preload("../styles/style_palette.gd")
 const TerrainBuilder = preload("../mesh/terrain_builder.gd")
 const TerrainMesher = preload("../mesh/terrain_mesher.gd")
@@ -100,13 +101,6 @@ signal chunk_details_changed(chunk_x: int, chunk_z: int)
 @export_group("Build")
 ## Spread the work over several frames instead of building in one go.
 @export var progressive := true
-## Work done per frame when progressive (ms).
-@export_range(1.0, 100.0, 0.5) var frame_budget_ms := 6.0
-## ... until `terrain_ready` (ms): the player is not in yet, a loading view
-## can run slower and the ground comes sooner (Tecno phone, 1.5 km open
-## world: a frame takes ~45 ms there; terrain_ready after 11.5 s with 6 ms of
-## building a frame, 5.4 s with 25 ms). 0 = `frame_budget_ms`.
-@export_range(0.0, 200.0, 0.5) var ready_budget_ms := 25.0
 ## Trunk / mound collision of the detail layers that have collision_radius > 0.
 @export var detail_collision := true
 ## Start building in _ready. Off = call build() yourself (e.g. after picking
@@ -120,18 +114,8 @@ signal chunk_details_changed(chunk_x: int, chunk_z: int)
 @export var stream_details := true
 ## Centre of the streaming. Empty = the current camera.
 @export var stream_focus: Node3D
-## A layer is built when the nearest point of a chunk is closer than its draw
-## distance + this (m): built before it can show, even when walking fast.
-@export_range(0.0, 200.0, 1.0, "suffix:m") var stream_margin := 16.0
-## ... and freed past its draw distance + this (m). Larger than
-## `stream_margin`, so walking along a chunk border does not build and free
-## it over and over.
-@export_range(0.0, 400.0, 1.0, "suffix:m") var unload_margin := 48.0
 ## Trunk / mound collision only on the chunks this close (m).
 @export_range(0.0, 1000.0, 1.0, "suffix:m") var collision_distance := 48.0
-## Work done per frame once loaded (ms): smaller than `frame_budget_ms`, the
-## game is running.
-@export_range(0.5, 50.0, 0.5) var stream_budget_ms := 2.5
 ## Build the ground only around the camera (or `stream_focus`), and free it
 ## past `ground_distance` + `unload_margin`. For big maps. Streams the
 ## details too.
@@ -144,6 +128,30 @@ signal chunk_details_changed(chunk_x: int, chunk_z: int)
 ## built (with its collision): the player can come in while the rest of
 ## `ground_distance` is still being built. 0 = wait for all of it.
 @export_range(0.0, 4000.0, 1.0, "suffix:m") var ready_distance := 96.0
+## Low-detail ground past `ground_distance`, up to this distance: blocks of
+## 4 x 4 chunks with one vertex in `far_step`, one draw call each, no
+## collision or details. 0 = nothing past `ground_distance`.
+@export_range(0.0, 8000.0, 1.0, "suffix:m") var far_distance := 1000.0
+
+@export_group("Performance")
+# Tuning of the build and streaming cost: the defaults suit a phone.
+## Work done per frame when progressive (ms).
+@export_range(1.0, 100.0, 0.5) var frame_budget_ms := 6.0
+## ... until `terrain_ready` (ms): the player is not in yet, a loading view
+## can run slower and the ground comes sooner (Tecno phone, 1.5 km open
+## world: a frame takes ~45 ms there; terrain_ready after 11.5 s with 6 ms of
+## building a frame, 5.4 s with 25 ms). 0 = `frame_budget_ms`.
+@export_range(0.0, 200.0, 0.5) var ready_budget_ms := 25.0
+## A layer is built when the nearest point of a chunk is closer than its draw
+## distance + this (m): built before it can show, even when walking fast.
+@export_range(0.0, 200.0, 1.0, "suffix:m") var stream_margin := 16.0
+## ... and freed past its draw distance + this (m). Larger than
+## `stream_margin`, so walking along a chunk border does not build and free
+## it over and over.
+@export_range(0.0, 400.0, 1.0, "suffix:m") var unload_margin := 48.0
+## Work done per frame once loaded (ms): smaller than `frame_budget_ms`, the
+## game is running.
+@export_range(0.5, 50.0, 0.5) var stream_budget_ms := 2.5
 ## Compute the faces of the streamed chunks on worker threads. Off: on the
 ## main thread, one chunk at a time (15 to 30 ms each on a laptop).
 @export var ground_threads := true
@@ -151,10 +159,6 @@ signal chunk_details_changed(chunk_x: int, chunk_z: int)
 ## a third less video memory and vertex reading; positions within ~1 mm).
 ## In game only: the editor's streamed map keeps exact vertices.
 @export var compress_vertices := true
-## Low-detail ground past `ground_distance`, up to this distance: blocks of
-## 4 x 4 chunks with one vertex in `far_step`, one draw call each, no
-## collision or details. 0 = nothing past `ground_distance`.
-@export_range(0.0, 8000.0, 1.0, "suffix:m") var far_distance := 1000.0
 ## Vertices kept in the far blocks: one in 2, 4 or 8 per side.
 @export_range(2, 8, 2) var far_step := 4
 
@@ -289,6 +293,20 @@ func _notification(what: int) -> void:
 func _target() -> Node3D:
 	return terrain if terrain != null else get_parent() as Node3D
 
+## The biome's Environment (sky, fog, light) in game, when the scene has none:
+## a WorldEnvironment of the scene always wins. Empty by default.
+func _apply_biome_environment(t: Node3D) -> void:
+	if t == null or not Meta.is_terrain(t):
+		return
+	var environment := TerrainBiome.of(t).environment
+	var world: World3D = get_viewport().find_world_3d() if get_viewport() != null else null
+	if environment == null or world == null or world.environment != null:
+		return
+	var node := WorldEnvironment.new()
+	node.name = "BiomeEnvironment"
+	node.environment = environment
+	NodeNames.add(self, node)
+
 func _ready() -> void:
 	# Saved meshes keep the material they were built with: give them the
 	# current one (wind on grass, shrubs and trees; Custom Materials).
@@ -298,6 +316,7 @@ func _ready() -> void:
 	if Engine.is_editor_hint():
 		_editor_restore.call_deferred()
 		return
+	_apply_biome_environment(t)
 	set_process(false)
 	if build_on_ready:
 		build.call_deferred()

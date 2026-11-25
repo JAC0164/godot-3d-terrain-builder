@@ -105,6 +105,27 @@ static func tangents_for(normals: PackedVector3Array) -> PackedFloat32Array:
 		tangents[i * 4 + 3] = 1.0
 	return tangents
 
+## Tangents of a planar-projected texture (top_uvs / cliff_uvs) for normal
+## maps: U along +X from above, along the wall for cliffs; the sign puts
+## Godot's binormal (cross(normal, tangent) * w) towards -V. Pure (threads).
+static func planar_tangents(normals: PackedVector3Array, top: bool) -> PackedFloat32Array:
+	var tangents := PackedFloat32Array()
+	tangents.resize(normals.size() * 4)
+	for i in normals.size():
+		var n := normals[i]
+		var u_axis := Vector3.RIGHT
+		var v_axis := Vector3.BACK
+		if not top:
+			u_axis = Vector3.BACK if absf(n.x) > absf(n.z) else Vector3.RIGHT
+			v_axis = Vector3.DOWN
+		var t := u_axis - n * n.dot(u_axis)
+		t = t.normalized() if t.length_squared() > 0.000001 else Vector3.RIGHT
+		tangents[i * 4] = t.x
+		tangents[i * 4 + 1] = t.y
+		tangents[i * 4 + 2] = t.z
+		tangents[i * 4 + 3] = 1.0 if n.cross(t).dot(-v_axis) >= 0.0 else -1.0
+	return tangents
+
 ## add_surface() from packed arrays, with colours (no conversion). With
 ## `tangents` (tangents_for), the vertices are stored compressed: 16 bytes
 ## instead of 24 for the vertex-coloured ground, positions within ~1 mm.

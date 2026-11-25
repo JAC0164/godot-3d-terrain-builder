@@ -511,7 +511,7 @@ func _add_multimesh(node_name: String, mesh_index: int, transforms: Array[Transf
 	# Same look as the terrain's details: its Detail Material when one is set.
 	var custom: Material = null
 	if get_parent() != null:
-		custom = Meta.get_optional(get_parent(), Meta.DETAIL_MATERIAL) as Material
+		custom = MaterialFactory.TerrainBiome.of(get_parent()).detail_material
 	node.material_override = custom if custom else MaterialFactory.detail_material(MaterialFactory.wind_profile(mesh_index))
 	add_child(node)
 

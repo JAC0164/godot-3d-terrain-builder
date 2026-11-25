@@ -124,7 +124,9 @@ func _experiment(terrain: Node3D, args: Dictionary) -> void:
 		# The plugin's own Ground Bumps (Inspector > Look).
 		GroundBumps.set_amount(terrain, float(args["bumps"]))
 	if args.has("ground_material"):
-		terrain.set_meta(Meta.GROUND_MATERIAL, load(args["ground_material"]))
+		var looked: Resource = (terrain.get_meta(Meta.BIOME) as Resource).duplicate()
+		looked.set("ground_material", load(args["ground_material"]))
+		terrain.set_meta(Meta.BIOME, looked)
 	if args.has("variation") or args.has("blend_noise"):
 		var biome: Resource = (terrain.get_meta(Meta.BIOME) as Resource).duplicate()
 		if args.has("variation"):

@@ -858,18 +858,28 @@ func set_ground_bumps(terrain: Node3D, value: float) -> void:
 	undo_redo.add_undo_method(terrain, "notify_property_list_changed")
 	undo_redo.commit_action(false)
 
-## Sets a Custom Material (Meta.GROUND_MATERIAL or Meta.DETAIL_MATERIAL,
-## null = built-in) and gives the built meshes the new material (no rebuild).
-func set_custom_material(terrain: Node3D, key: String, material: Resource) -> void:
+## Roads, Rivers & Waterholes > Customise Road / Customise Water: puts an
+## editable road material / copy of the built-in water in the terrain's biome
+## (an editable Temperate first when it has none) and opens it. The roads /
+## rivers that follow the biome take it. Undoable (the material slot).
+func customise_feature_material(terrain: Node3D, water: bool) -> void:
 	if not is_instance_valid(terrain):
 		return
-	if material != null and not (material is Material):
-		push_warning("Lowpoly Terrain Editor: a Custom Material must be a Material resource.")
-		return
-	Meta.set_optional(terrain, key, material)
-	TerrainBuilder.refresh_materials(terrain)
-	terrain.notify_property_list_changed()
-	EditorInterface.mark_scene_as_unsaved()
+	if not (Meta.get_optional(terrain, Meta.BIOME) is TerrainBiome):
+		terrain.set_meta(Meta.BIOME, TerrainBiome.make_temperate())
+		EditorInterface.mark_scene_as_unsaved()
+	var biome := TerrainBiome.of(terrain)
+	var property := "water_material" if water else "road_material"
+	var material: Material = biome.get(property)
+	if material == null:
+		material = MaterialFactory.editable_water_material(biome.water_color) if water else MaterialFactory.editable_road_material(biome.road_color)
+		var undo_redo := get_undo_redo()
+		undo_redo.create_action("Lowpoly Terrain: Customise %s" % ("Water" if water else "Road"), UndoRedo.MERGE_DISABLE, terrain)
+		undo_redo.add_do_property(biome, property, material)
+		undo_redo.add_undo_property(biome, property, null)
+		undo_redo.commit_action()
+	# Deferred: the Inspector button that called this is still emitting.
+	EditorInterface.edit_resource.call_deferred(material)
 
 ## Game > Ground Casts Shadows: applied to the ground chunks at once, no
 ## rebuild. Undoable.

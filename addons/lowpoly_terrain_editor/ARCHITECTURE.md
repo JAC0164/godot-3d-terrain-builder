@@ -156,8 +156,8 @@ ui/
   surface with a shared material; only textured styles get extra surfaces.
   Terrain materials are shared through `MaterialFactory`'s cache, never
   duplicated per surface.
-- Custom Materials (`Meta.GROUND_MATERIAL`, `Meta.DETAIL_MATERIAL`) are the
-  one style hook: `MaterialFactory.terrain_vertex_color_material()` and
+- Custom Materials (the biome's `ground_material` / `detail_material`) are
+  the one style hook: `MaterialFactory.terrain_vertex_color_material()` and
   `DetailScatter.layer_material(layer, terrain)` return them when set, and
   `TerrainBuilder.refresh_materials()` swaps them into built meshes without a
   rebuild (vertex-coloured surfaces = surfaces with `ARRAY_FORMAT_COLOR`; also
@@ -172,25 +172,42 @@ ui/
   With every shading setting at 0 the mesher output is unchanged.
 - Biomes are data, not code: the terrain stores a `LowpolyTerrainBiome` in
   `_lte_biome` (none = `TerrainBiome.default_biome()`). The biome is the
-  only source of the look: `TerrainShading.settings()` reads its baked
-  shading and `WaterholeStyle.shapes()` its waterhole colors (the terrain
-  keeps only Smooth Ground, Flat Top Lighting and Double-Sided). A biome
+  whole theme, the only source of the look: ground styles, baked shading
+  (`TerrainShading.settings()`), waterhole colors (`WaterholeStyle.shapes()`),
+  Flat Top Lighting, Ground / Detail Material, road color / material, water
+  color / material and an Environment (the terrain keeps only Smooth Ground
+  and Double-Sided). Cells painted with a biome ground style follow it: their
+  palette entry keeps `"biome_style"` and `StylePalette.sync_with_biome()`
+  (from `ensure_defaults`, `rebuild_all` and snapshot restores) updates it
+  and the brush. Roads / rivers without a `"color"` key follow the biome
+  (`FeatureStyle.follows_biome()`; their UVs are in meters), the others keep
+  their own look. `MaterialFactory.road_material()` / `river_material()`
+  return the biome's material when set (the water switched to the shader
+  without refraction on phones, one copy per material). The runtime node
+  adds a WorldEnvironment with the biome's Environment in game when the
+  scene has none (`_apply_biome_environment`). A biome
   file is shared by every terrain using it; `copy_biome_to_terrain()`
   (Inspector "Copy Biome to This Terrain", undoable) stores a deep copy in
   the scene. Every biome property setter calls `emit_changed()` and the
   biome re-emits its layers' `changed`; the plugin watches the biome of the
   last selected terrain (even while the biome is open in the Inspector) and,
   250 ms after the last edit, calls `TerrainBuilder.rebuild_all()` when
-  `look_signature()` changed (shading / waterhole colors) or
+  `look_signature()` changed (shading, waterhole colors, ground styles,
+  materials) or
   `rebuild_all_details()` otherwise.
 - Old scenes stored a copy of the biome's shading (`_lte_shade_*` except
-  smooth), the waterhole colors (`_lte_waterhole_clay/crack_color`) and
-  colors in each waterhole. `TerrainData.migrate_look()` (from
-  `ensure_defaults`, editor and runtime) removes them; when they differ
-  from the biome, the terrain first gets its own biome copy holding them
-  (named "<biome> (<terrain>)"), so it looks the same. Smoke-tested.
-- Out of scope, left to each game: lighting (sky, fog, sun) and what lies
-  past the map border. They depend on the camera (FPS / top-down); the test
+  smooth), the waterhole colors (`_lte_waterhole_clay/crack_color`), colors
+  in each waterhole, and Ground / Detail Material, Flat Top Lighting and the
+  road / river colors on the terrain (`TerrainBiome.LEGACY_LOOK_KEYS`).
+  `TerrainData.migrate_look()` (from `ensure_defaults`, editor and runtime)
+  removes them; when they differ from the biome, the terrain first gets its
+  own biome copy holding them (named "<biome> (<terrain>)"), so it looks the
+  same. Then `migrate_feature_look()` drops the old road / river look
+  settings and strips the look of each stored road / river equal to the
+  biome's (it follows the biome from then on); any other keeps its own look.
+  Checked by `test_project/tools/check_look_migration.gd`.
+- Out of scope, left to each game: the light setup beyond the biome's
+  optional Environment (sun, sky scene) and what lies past the map border. They depend on the camera (FPS / top-down); the test
   project shows one way (`world/savanna_sky.tscn`, `world/map_horizon.gd`).
 - Details (`DetailScatter`) are MultiMeshInstance3D children of each chunk,
   one per enabled biome layer (`_Details_<index>_<name>`; stale ones are
@@ -199,7 +216,7 @@ ui/
   the two-sided grass material and one triangle per blade
   (`DetailMeshes.builtin(i, true)`, chosen in `DetailScatter._mesh_for`):
   half the triangles of the densest layers. With any other material (the
-  terrain's Detail Material) they keep both windings. The road / river mesh
+  biome's Detail Material) they keep both windings. The road / river mesh
   and the waterhole plates cast no shadow (flat on the ground). The ground
   chunks cast shadows unless Game > Ground Casts Shadows is off
   (`Meta.GROUND_SHADOWS`): set on new chunks, and on existing ones by

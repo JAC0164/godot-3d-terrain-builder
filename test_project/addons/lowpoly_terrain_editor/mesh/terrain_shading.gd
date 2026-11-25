@@ -162,7 +162,8 @@ static func prepare(terrain: Node3D, carve: PackedFloat32Array, min_x: int, min_
 	var hole_rect := Rect2(float(min_x) * spacing - half, float(min_z) * spacing - half, float(max_x - min_x) * spacing, float(max_z - min_z) * spacing)
 	var holes := WaterholeStyle.shapes(terrain, hole_rect)
 	var has_holes := not holes.is_empty()
-	if not is_enabled(s) and not has_holes:
+	# Blended textures need the context (weights) even with shading off.
+	if not is_enabled(s) and not has_holes and MaterialFactory.splat_layers(terrain).is_empty():
 		return null
 
 	var ctx := Context.new()

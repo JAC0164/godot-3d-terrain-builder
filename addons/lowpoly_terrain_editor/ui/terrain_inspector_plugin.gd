@@ -14,6 +14,8 @@ const Meta = preload("../core/terrain_meta.gd")
 const TerrainData = preload("../core/terrain_data.gd")
 const MaterialFactory = preload("../materials/material_factory.gd")
 const TerrainBiome = preload("../biomes/terrain_biome.gd")
+const GroundStyle = preload("../biomes/ground_style.gd")
+const StylePalette = preload("../styles/style_palette.gd")
 const DetailCollision = preload("../mesh/detail_collision.gd")
 const WaterholeStyle = preload("../styles/waterhole_style.gd")
 const MapPresets = preload("../generation/map_presets.gd")
@@ -184,11 +186,11 @@ func _add_map_preset_row(section: VBoxContainer, terrain: Node3D) -> void:
 			Meta.set_optional(terrain, Meta.MAP_RECIPE, presets[index])
 			picker.edited_resource = presets[index])
 
-## Look: biome, its ground styles, details on / off, smooth ground and the
-## game's own materials.
+## Look: the biome (the terrain's theme: ground styles, shading, what grows,
+## materials and ambience), details on / off and smooth ground.
 func _build_look_section(panel: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(panel, "Look", false,
-		"How the terrain looks: its biome (ground styles, shading, what grows) and your game's own materials. The ground style to paint is picked in the list next to the Ground tool.")
+		"How the terrain looks. Its biome is its theme: ground styles, shading, what grows, your own materials and the ambience. The ground style to paint is picked in the list next to the Ground tool.")
 	var biome_object: Object = Meta.get_optional(terrain, Meta.BIOME)
 	var biome := biome_object as Resource
 	var shown: TerrainBiome = biome if biome != null else TerrainBiome.default_biome()
@@ -201,8 +203,8 @@ func _build_look_section(panel: VBoxContainer, terrain: Node3D) -> void:
 	for style in shown.ground_styles:
 		if style != null:
 			style_names.append(style.name)
-	var biome_tip := ("The terrain's look: ground styles, shading, waterhole colors and what grows on it. Empty = built-in Temperate. "
-		+ "Edit it in its own Inspector: the terrain updates at once.\nGround styles (list next to the Ground tool): %s.\nWhat grows: %s." % [
+	var biome_tip := ("The terrain's theme: ground styles, shading, waterhole colors, what grows on it, your own ground / detail / road / water materials and the ambience (Environment). Empty = built-in Temperate. "
+		+ "Edit it in its own Inspector: the terrain updates at once, cells painted with a ground style follow it.\nGround styles (list next to the Ground tool): %s.\nWhat grows: %s." % [
 			", ".join(style_names) if not style_names.is_empty() else "none", ", ".join(layer_names) if not layer_names.is_empty() else "nothing"])
 	var label := Label.new()
 	label.text = "Biome"
@@ -235,29 +237,25 @@ func _build_look_section(panel: VBoxContainer, terrain: Node3D) -> void:
 		func() -> void: host.replace_details(terrain))
 	_add_float_row(section, terrain, "Detail Density", Meta.DETAIL_DENSITY, 0.0, 4.0, 0.05, Meta.DEFAULT_DETAIL_DENSITY, "Multiplies how much grows (1 = as in the biome). Lower it for low-end phones.", _tuning_setter(terrain, Meta.DETAIL_DENSITY))
 	_add_checkbox(section, "Smooth Ground",
-		"Ground shaded smoothly: no visible triangle pattern. Off = faceted low-poly ground. Same cost either way; cliffs stay faceted. Up close, give the ground a texture with your own Ground Material (below).",
+		"Ground shaded smoothly: no visible triangle pattern. Off = faceted low-poly ground. Same cost either way; cliffs stay faceted. Up close, give the ground styles textures, or your own Ground Material (biome).",
 		Meta.get_bool(terrain, Meta.SHADE_SMOOTH, Meta.DEFAULT_SHADE_SMOOTH), _tuning_setter(terrain, Meta.SHADE_SMOOTH))
 	_add_float_row(section, terrain, "Ground Bumps", Meta.GROUND_BUMPS, 0.0, 2.0, 0.05, Meta.DEFAULT_GROUND_BUMPS,
 		"Small bumps of about this height (m) all over the ground, so faceted ground catches the light (0 = flat). "
 		+ "Written in the heights: collision, details, roads and rivers follow, the Relief tools work on top. Ctrl+Z undoes it.",
 		func(value: float) -> void: host.set_ground_bumps(terrain, value))
-	_add_material_row(section, terrain, "Ground Material", Meta.GROUND_MATERIAL,
-		"Optional: your own material for the untextured ground, cliffs and waterholes (toon, unshaded, palette...). Empty = built-in. "
-		+ "It must use the vertex color as albedo (StandardMaterial3D: Vertex Color > Use as Albedo + Is sRGB; a shader: COLOR). "
-		+ "Textured ground styles keep their texture.")
-	_add_material_row(section, terrain, "Detail Material", Meta.DETAIL_MATERIAL,
-		"Optional: your own material for grass, trees, rocks... (not custom meshes set to use their own materials). Empty = built-in. "
-		+ "It must use the vertex color as albedo, like Ground Material. The built-in wind needs a shader that moves the vertices.")
 
 ## Roads, rivers and waterholes: what the toolbar tools draw next.
 func _build_features_section(panel: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(panel, "Roads, Rivers & Waterholes", false,
-		"Settings of the next road, river or waterhole drawn with the toolbar tools; Ctrl+drag with Ground removes them. Waterhole colors come from the biome (Look > Edit Biome > Waterholes).")
+		"Shape of the next road, river or waterhole drawn with the toolbar tools; Ctrl+drag with Ground removes them. Their look (colors, materials) is the biome's.")
 	_add_float_row(section, terrain, "Road Width", Meta.ROAD_WIDTH, ToolMode.FEATURE_WIDTH_MIN, ToolMode.FEATURE_WIDTH_MAX, ToolMode.FEATURE_WIDTH_STEP, Meta.DEFAULT_ROAD_WIDTH, "Width of the next road (also the Size field of the Road tool).", _plain_setter(terrain, Meta.ROAD_WIDTH))
-	_add_color_row(section, terrain, "Road Color", Meta.ROAD_COLOR, Meta.DEFAULT_ROAD_COLOR, "Color of new roads (Advanced > Road Look: texture).", _plain_setter(terrain, Meta.ROAD_COLOR), true)
 	_add_float_row(section, terrain, "River Width", Meta.RIVER_WIDTH, ToolMode.FEATURE_WIDTH_MIN, ToolMode.FEATURE_WIDTH_MAX, ToolMode.FEATURE_WIDTH_STEP, Meta.DEFAULT_RIVER_WIDTH, "Width of the next river and of its bed (also the Size field of the River tool).", _plain_setter(terrain, Meta.RIVER_WIDTH))
 	_add_float_row(section, terrain, "River Depth", Meta.RIVER_DEPTH, 0.0, 8.0, 0.05, Meta.DEFAULT_RIVER_DEPTH, "How deep the river bed is dug.", _plain_setter(terrain, Meta.RIVER_DEPTH))
-	_add_color_row(section, terrain, "Water Color", Meta.RIVER_COLOR, Meta.DEFAULT_RIVER_COLOR, "Water tint and transparency (Advanced > River Water: waves, flow).", _plain_setter(terrain, Meta.RIVER_COLOR), true)
+	_add_float_row(section, terrain, "Water Level Drop", Meta.RIVER_SURFACE_DROP, -1.0, 4.0, 0.01, Meta.DEFAULT_RIVER_SURFACE_DROP, "How far below the ground around it the water surface of the next river is.", _plain_setter(terrain, Meta.RIVER_SURFACE_DROP))
+	_add_button(section, "Customise Road", "Put an editable road material in the biome (Road Material) and open it: texture, color, roughness... Every road follows it.",
+		func() -> void: host.customise_feature_material(terrain, false))
+	_add_button(section, "Customise Water", "Put an editable copy of the built-in water in the biome (Water Material) and open it: color, waves, flow, refraction... Every river follows it.",
+		func() -> void: host.customise_feature_material(terrain, true))
 
 	var w := func(field: String) -> String: return WaterholeStyle.setting_key(field)
 	var d: Dictionary = WaterholeStyle.DEFAULTS
@@ -281,6 +279,10 @@ func _build_game_section(panel: VBoxContainer, terrain: Node3D) -> void:
 	_add_checkbox(section, "Walkable Collision", "Collision for the ground and cliffs, built from the visible terrain. " + trees,
 		Meta.get_bool(terrain, Meta.COLLISION_ENABLED, false), _tuning_setter(terrain, Meta.COLLISION_ENABLED))
 	_add_int_row(section, terrain, "Collision Layer", Meta.COLLISION_LAYER, 1, 32, 1, "Physics layer of the terrain collision.", _tuning_setter(terrain, Meta.COLLISION_LAYER, true))
+	_add_checkbox(section, "Road Collision", "Roads drawn next are part of the walkable collision.",
+		Meta.get_bool(terrain, Meta.ROAD_COLLISION, true), _plain_setter(terrain, Meta.ROAD_COLLISION))
+	_add_checkbox(section, "Water Surface Collision", "Characters walk on the water surface of the rivers drawn next instead of their bed. Off for most games.",
+		Meta.get_bool(terrain, Meta.RIVER_COLLISION, false), _plain_setter(terrain, Meta.RIVER_COLLISION))
 
 	var row := _add_row(section, "Runtime Build", "")
 	var option := OptionButton.new()
@@ -310,11 +312,8 @@ func _build_game_section(panel: VBoxContainer, terrain: Node3D) -> void:
 func _build_advanced_section(panel: VBoxContainer, terrain: Node3D) -> void:
 	var advanced := _add_section(panel, "Advanced", false, "Fine tuning and rare settings. A first map needs none of them.")
 	_build_size_section(advanced, terrain)
-	_build_shading_section(advanced, terrain)
 	_build_heights_section(advanced, terrain)
 	_build_custom_style_section(advanced, terrain)
-	_build_road_look_section(advanced, terrain)
-	_build_river_water_section(advanced, terrain)
 	_build_waterhole_shape_section(advanced, terrain)
 	_build_advanced_details_section(advanced, terrain)
 	_build_pixel_map_section(advanced, terrain)
@@ -327,36 +326,17 @@ func _build_size_section(parent: VBoxContainer, terrain: Node3D) -> void:
 				terrain.set_meta(Meta.AUTO_EXPAND, enabled)
 				terrain.notify_property_list_changed()
 	)
-	_add_int_row(section, terrain, "Growth Step", Meta.EXPAND_CHUNK, 1, 64, Meta.DEFAULT_EXPAND_CHUNK, "Cells added on each side when the terrain grows.", _canvas_setter(terrain, Meta.EXPAND_CHUNK))
 	_add_int_row(section, terrain, "Maximum Cells", Meta.MAX_RESOLUTION, 64, 1024, Meta.DEFAULT_MAX_RESOLUTION, "The terrain never grows beyond this many cells per side.", _canvas_setter(terrain, Meta.MAX_RESOLUTION))
-	_add_button(section, "Grow Terrain", "Grow the terrain by one Growth Step on every side.", func() -> void:
+	_add_button(section, "Grow Terrain", "Grow the terrain by a few cells on every side.", func() -> void:
 		host.grow_canvas(terrain)
 	)
 
-func _build_shading_section(parent: VBoxContainer, terrain: Node3D) -> void:
-	var section := _add_section(parent, "Shading", false,
-		"How the ground is lit. Its baked shading (style blend, slope tint, ambient occlusion, color variation, large-scale variation, cliff darkening) is part of the biome.")
-	var biome_object: Object = Meta.get_optional(terrain, Meta.BIOME)
-	var biome := biome_object as Resource
-	if biome == null:
-		_add_button(section, "Edit Ground Shading", "The built-in Temperate biome cannot be edited: this puts an editable copy in the terrain and opens it (group Baked Shading).",
-			func() -> void: host.create_biome(terrain))
-	else:
-		_add_button(section, "Edit Ground Shading", _edit_biome_tip(host.biome_is_shared(terrain)).replace("Open the biome in the Inspector.", "Open the biome (group Baked Shading)."),
-			func() -> void: EditorInterface.edit_resource.call_deferred(biome))
-	_add_float_row(section, terrain, "Flat Top Lighting", Meta.TOP_NORMAL_UP_BIAS, 0.0, 1.0, 0.05, 0.0, "0 = each ground face lit by its own slope (low-poly look); 1 = all ground lit as if flat.", _tuning_setter(terrain, Meta.TOP_NORMAL_UP_BIAS))
-	_add_checkbox(section, "Double-Sided Faces", "Also draws the back of every face. Leave off; turn on only if some faces are invisible.",
-		Meta.get_bool(terrain, Meta.DOUBLE_SIDED, false), _tuning_setter(terrain, Meta.DOUBLE_SIDED))
-
 func _build_heights_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(parent, "Heights & Offsets", false,
-		"How high and how deep the ground can go, and small vertical corrections.")
+		"How high and how deep the ground can go.")
 	_add_float_row(section, terrain, "Highest Ground", Meta.HEIGHT_MAX, 0.0, 128.0, 0.1, Meta.DEFAULT_HEIGHT_MAX, "Highest height the ground can be raised to (Relief tool, generated hills).", _tuning_setter(terrain, Meta.HEIGHT_MAX))
 	_add_float_row(section, terrain, "Lowest Ground", Meta.HEIGHT_MIN, -128.0, 0.0, 0.1, Meta.DEFAULT_HEIGHT_MIN, "Lowest height the ground can be dug to (Relief tool with Ctrl, generated dips). Keep it above Cliff Bottom.", _tuning_setter(terrain, Meta.HEIGHT_MIN))
 	_add_float_row(section, terrain, "Cliff Bottom", Meta.BASE_Y, -32.0, 8.0, 0.05, Meta.DEFAULT_BASE_Y, "Height of the bottom of the cliffs around the terrain.", _tuning_setter(terrain, Meta.BASE_Y))
-	_add_float_row(section, terrain, "Top Y Offset", Meta.TOP_Y_OFFSET, -0.5, 0.5, 0.005, 0.0, "Moves the ground faces up or down a little.", _tuning_setter(terrain, Meta.TOP_Y_OFFSET))
-	_add_float_row(section, terrain, "Cliff Y Offset", Meta.CLIFF_Y_OFFSET, -0.5, 0.5, 0.005, 0.0, "Moves the top edge of the cliffs up or down a little.", _tuning_setter(terrain, Meta.CLIFF_Y_OFFSET))
-	_add_float_row(section, terrain, "Road / River Y Offset", Meta.FEATURE_Y_OFFSET, -0.5, 0.5, 0.005, 0.0, "Moves every road and river up or down a little.", _tuning_setter(terrain, Meta.FEATURE_Y_OFFSET))
 
 func _build_custom_style_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(parent, "Custom Ground Style", false,
@@ -367,28 +347,6 @@ func _build_custom_style_section(parent: VBoxContainer, terrain: Node3D) -> void
 	_add_float_row(section, terrain, "Top Texture Tile Size", Meta.BRUSH_TOP_TILE_SIZE, 0.1, 64.0, 0.1, Meta.DEFAULT_TILE_SIZE, "Size (m) of one repeat of the top texture.", _plain_setter(terrain, Meta.BRUSH_TOP_TILE_SIZE))
 	_add_texture_row(section, terrain, "Side Texture", Meta.BRUSH_CLIFF_TEXTURE, "Optional repeating texture of the cliffs painted next.", _plain_setter(terrain, Meta.BRUSH_CLIFF_TEXTURE))
 	_add_float_row(section, terrain, "Side Texture Tile Size", Meta.BRUSH_CLIFF_TILE_SIZE, 0.1, 64.0, 0.1, Meta.DEFAULT_TILE_SIZE, "Size (m) of one repeat of the side texture.", _plain_setter(terrain, Meta.BRUSH_CLIFF_TILE_SIZE))
-
-func _build_road_look_section(parent: VBoxContainer, terrain: Node3D) -> void:
-	var section := _add_section(parent, "Road Look", false, "Texture and height of new roads.")
-	_add_texture_row(section, terrain, "Road Texture", Meta.ROAD_TEXTURE, "Optional repeating texture of new roads (replaces Road Color).", _plain_setter(terrain, Meta.ROAD_TEXTURE))
-	_add_float_row(section, terrain, "Road Texture Tile Size", Meta.ROAD_TILE_SIZE, 0.1, 64.0, 0.1, Meta.DEFAULT_ROAD_TILE_SIZE, "Length (m) of one repeat of the road texture.", _plain_setter(terrain, Meta.ROAD_TILE_SIZE))
-	_add_float_row(section, terrain, "Road Height", Meta.ROAD_Y_OFFSET, -1.0, 2.0, 0.005, Meta.DEFAULT_ROAD_Y_OFFSET, "Roads sit this much above the ground so they do not flicker.", _plain_setter(terrain, Meta.ROAD_Y_OFFSET))
-	_add_checkbox(section, "Road Collision", "Roads are part of the walkable collision.",
-		Meta.get_bool(terrain, Meta.ROAD_COLLISION, true), _plain_setter(terrain, Meta.ROAD_COLLISION))
-
-func _build_river_water_section(parent: VBoxContainer, terrain: Node3D) -> void:
-	var section := _add_section(parent, "River Water", false, "How the water of the rivers looks and moves.")
-	_add_float_row(section, terrain, "Water Level Drop", Meta.RIVER_SURFACE_DROP, -1.0, 4.0, 0.01, Meta.DEFAULT_RIVER_SURFACE_DROP, "How far below the ground around it the water surface is.", _plain_setter(terrain, Meta.RIVER_SURFACE_DROP))
-	_add_texture_row(section, terrain, "Water Texture", Meta.RIVER_TEXTURE, "Optional repeating color texture of the water.", _plain_setter(terrain, Meta.RIVER_TEXTURE))
-	_add_water_normal_controls(section, terrain)
-	_add_float_row(section, terrain, "Water Texture Tile Size", Meta.RIVER_TILE_SIZE, 0.1, 128.0, 0.1, Meta.DEFAULT_RIVER_TILE_SIZE, "Size (m) of one repeat of the water textures.", _plain_setter(terrain, Meta.RIVER_TILE_SIZE))
-	_add_float_row(section, terrain, "Water Roughness", Meta.RIVER_ROUGHNESS, 0.0, 1.0, 0.01, Meta.DEFAULT_RIVER_ROUGHNESS, "Lower = shinier water.", _plain_setter(terrain, Meta.RIVER_ROUGHNESS))
-	_add_float_row(section, terrain, "Ripple Strength", Meta.RIVER_NORMAL_STRENGTH, 0.0, 4.0, 0.05, Meta.DEFAULT_RIVER_NORMAL_STRENGTH, "How strong the moving ripples are.", _plain_setter(terrain, Meta.RIVER_NORMAL_STRENGTH))
-	_add_float_row(section, terrain, "Refraction Strength", Meta.RIVER_REFRACTION, 0.0, 0.08, 0.001, Meta.DEFAULT_RIVER_REFRACTION, "How much the water bends what is under it. 0 = none (cheaper; see also Game > Mobile Water).", _plain_setter(terrain, Meta.RIVER_REFRACTION))
-	_add_float_row(section, terrain, "Flow Speed", Meta.RIVER_FLOW_SPEED, -1.0, 1.0, 0.005, Meta.DEFAULT_RIVER_FLOW_SPEED, "How fast the water textures move.", _plain_setter(terrain, Meta.RIVER_FLOW_SPEED))
-	_add_float_row(section, terrain, "Flow Direction", Meta.RIVER_FLOW_ANGLE, -180.0, 180.0, 1.0, Meta.DEFAULT_RIVER_FLOW_ANGLE, "Direction the water flows, in degrees: 0 = toward +X, 90 = toward +Z, -90 = toward -Z. Make it flow downhill.", _plain_setter(terrain, Meta.RIVER_FLOW_ANGLE))
-	_add_checkbox(section, "Water Surface Collision", "Characters walk on the water surface instead of the river bed. Off for most games.",
-		Meta.get_bool(terrain, Meta.RIVER_COLLISION, false), _plain_setter(terrain, Meta.RIVER_COLLISION))
 
 func _build_waterhole_shape_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(parent, "Waterhole Shape", false,
@@ -416,10 +374,12 @@ func _build_waterhole_shape_section(parent: VBoxContainer, terrain: Node3D) -> v
 
 func _build_advanced_details_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(parent, "Details", false, "Grass, trees, rocks and props of the biome.")
-	_add_checkbox(section, "Details Everywhere",
-		"On: the biome's grass, trees and props grow by themselves on all ground, also on ground painted later (scenes made before this setting). "
-		+ "Off (new terrains): they grow on the map Generate Map made and where you paint with the Vegetation tool; ground painted by hand stays bare.",
-		Meta.get_bool(terrain, Meta.DETAILS_EVERYWHERE, Meta.DEFAULT_DETAILS_EVERYWHERE), _tuning_setter(terrain, Meta.DETAILS_EVERYWHERE))
+	# Old scenes only (new terrains start without it).
+	if Meta.get_bool(terrain, Meta.DETAILS_EVERYWHERE, Meta.DEFAULT_DETAILS_EVERYWHERE):
+		_add_checkbox(section, "Details Everywhere",
+			"On: the biome's grass, trees and props grow by themselves on all ground, also on ground painted later (scenes made before this setting). "
+			+ "Off (new terrains): they grow on the map Generate Map made and where you paint with the Vegetation tool; ground painted by hand stays bare.",
+			true, _tuning_setter(terrain, Meta.DETAILS_EVERYWHERE))
 	_add_float_row(section, terrain, "Detail Size", Meta.DETAIL_SCALE, 0.1, 4.0, 0.05, Meta.DEFAULT_DETAIL_SCALE, "Multiplies the size of every detail (1 = as in the biome).", _tuning_setter(terrain, Meta.DETAIL_SCALE))
 
 func _build_pixel_map_section(parent: VBoxContainer, terrain: Node3D) -> void:
@@ -434,79 +394,52 @@ func _build_pixel_map_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	_add_float_row(generator, terrain, "Color Tolerance", Meta.GENERATOR_COLOR_TOLERANCE, 0.0, 0.5, 0.01, Meta.DEFAULT_GENERATOR_COLOR_TOLERANCE, "How far a pixel may be from pure white / green / red / blue.", _plain_setter(terrain, Meta.GENERATOR_COLOR_TOLERANCE))
 	_add_float_row(generator, terrain, "Hill Smoothness", Meta.GENERATOR_SMOOTHNESS, 0.0, 32.0, 0.5, 0.0, "Width (cells) of the slopes around red and blue areas. 0 = flat areas with steps.", _plain_setter(terrain, Meta.GENERATOR_SMOOTHNESS))
 
-	var styles := _add_section(generator, "Style per Color", false,
-		"Ground style of each pixel color. With 'One Style for All Colors' they all use the Custom Ground Style.")
-	_add_checkbox(styles, "One Style for All Colors",
-		"Green, red and blue all use the Custom Ground Style. Off = each color uses its own style below (kept while this is on).",
+	_add_checkbox(generator, "One Style for All Colors",
+		"Green, red and blue all get the ground style the Ground tool paints. Off = each color gets the biome ground style picked below.",
 		Meta.get_bool(terrain, Meta.GENERATOR_USE_SINGLE_STYLE, true), _plain_setter(terrain, Meta.GENERATOR_USE_SINGLE_STYLE))
-	_add_generator_style_section(styles, terrain, "Green / Ground", "green")
-	_add_generator_style_section(styles, terrain, "Red / Raised Ground", "red")
-	_add_generator_style_section(styles, terrain, "Blue / Lowered Ground", "blue")
+	_add_generator_style_choice(generator, terrain, "Green Style", "green")
+	_add_generator_style_choice(generator, terrain, "Red Style", "red")
+	_add_generator_style_choice(generator, terrain, "Blue Style", "blue")
 
 	_add_button(generator, "Generate from Image", "Rebuild the terrain from the image (Ctrl+Z restores the previous terrain).", func() -> void:
 		host.generate_from_image(terrain)
 	)
 
-func _add_generator_style_section(parent: VBoxContainer, terrain: Node3D, title: String, prefix: String) -> void:
-	var section := _add_section(parent, title, false, "")
-	var top_color_key := Meta.generator_style_key(prefix, "top_color")
-	var cliff_color_key := Meta.generator_style_key(prefix, "cliff_color")
-	var top_texture_key := Meta.generator_style_key(prefix, "top_texture")
-	var cliff_texture_key := Meta.generator_style_key(prefix, "cliff_texture")
-	var top_tile_key := Meta.generator_style_key(prefix, "top_tile_size")
-	var cliff_tile_key := Meta.generator_style_key(prefix, "cliff_tile_size")
-
-	_add_color_row(section, terrain, "Top Color", top_color_key, Meta.DEFAULT_TOP_COLOR, "Ground color of this pixel color (when Top Texture is empty).", _plain_setter(terrain, top_color_key))
-	_add_color_row(section, terrain, "Side Color", cliff_color_key, Meta.DEFAULT_CLIFF_COLOR, "Cliff color of this pixel color (when Side Texture is empty).", _plain_setter(terrain, cliff_color_key))
-	_add_texture_row(section, terrain, "Top Texture", top_texture_key, "Optional ground texture of this pixel color.", _plain_setter(terrain, top_texture_key))
-	_add_float_row(section, terrain, "Top Texture Tile Size", top_tile_key, 0.1, 64.0, 0.1, Meta.DEFAULT_TILE_SIZE, "Size (m) of one repeat of the top texture.", _plain_setter(terrain, top_tile_key))
-	_add_texture_row(section, terrain, "Side Texture", cliff_texture_key, "Optional cliff texture of this pixel color.", _plain_setter(terrain, cliff_texture_key))
-	_add_float_row(section, terrain, "Side Texture Tile Size", cliff_tile_key, 0.1, 64.0, 0.1, Meta.DEFAULT_TILE_SIZE, "Size (m) of one repeat of the side texture.", _plain_setter(terrain, cliff_tile_key))
-
-func _add_water_normal_controls(parent: VBoxContainer, terrain: Node3D) -> void:
-	var tooltip := "Optional ripple texture (a seamless normal map). Empty = built-in ripples. 'Create Editable Ripples' makes one you can tune here."
-	var picker := _add_texture_row(parent, terrain, "Ripple Texture", Meta.RIVER_NORMAL_TEXTURE, tooltip, _plain_setter(terrain, Meta.RIVER_NORMAL_TEXTURE, true))
-
-	_add_button(parent, "Create Editable Ripples", "Replace the ripple texture by a noise texture whose main settings show here.", func() -> void:
-		if not is_instance_valid(terrain):
+## A pixel color's ground style: one of the biome's ground styles (written
+## into the generator style settings), or what it holds now ("Custom").
+func _add_generator_style_choice(parent: VBoxContainer, terrain: Node3D, title: String, prefix: String) -> void:
+	var styles := TerrainBiome.of(terrain).ground_styles.filter(func(style: Resource) -> bool: return style != null)
+	var keys := StylePalette.generator_style_keys(prefix)
+	var row := _add_row(parent, title, "Ground style of the %s pixels (when One Style for All Colors is off)." % prefix)
+	var option := OptionButton.new()
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var top: Color = terrain.get_meta(keys["top_color"], Meta.DEFAULT_TOP_COLOR)
+	var side: Color = terrain.get_meta(keys["cliff_color"], Meta.DEFAULT_CLIFF_COLOR)
+	var selected := -1
+	for i in styles.size():
+		var style: GroundStyle = styles[i]
+		option.add_item(String(style.name), i)
+		var same_colors := top.is_equal_approx(style.top_color) and side.is_equal_approx(style.side_color)
+		var same_textures: bool = Meta.get_optional(terrain, keys["top_texture"]) == style.top_texture and Meta.get_optional(terrain, keys["cliff_texture"]) == style.side_texture
+		if selected < 0 and same_colors and same_textures:
+			selected = i
+	if selected < 0:
+		option.add_item("Custom", styles.size())
+		selected = styles.size()
+	option.select(option.get_item_index(selected))
+	option.item_selected.connect(func(index: int) -> void:
+		var id := option.get_item_id(index)
+		if not is_instance_valid(terrain) or id >= styles.size():
 			return
-		terrain.set_meta(Meta.RIVER_NORMAL_TEXTURE, MaterialFactory.make_water_normal_texture())
-		terrain.notify_property_list_changed()
+		var picked: GroundStyle = styles[id]
+		terrain.set_meta(keys["top_color"], picked.top_color)
+		terrain.set_meta(keys["cliff_color"], picked.side_color)
+		Meta.set_optional(terrain, keys["top_texture"], picked.top_texture)
+		Meta.set_optional(terrain, keys["cliff_texture"], picked.side_texture)
+		terrain.set_meta(keys["top_tile_size"], picked.top_tile_size)
+		terrain.set_meta(keys["cliff_tile_size"], picked.side_tile_size)
 	)
-
-	var resource := picker.edited_resource
-	if not (resource is NoiseTexture2D):
-		return
-
-	var noise_texture := resource as NoiseTexture2D
-	var editor := _add_section(parent, "Ripple Texture Settings", false, "")
-
-	_add_checkbox(editor, "Seamless", "Tiles without visible seams.", noise_texture.seamless, func(enabled: bool) -> void:
-		noise_texture.seamless = enabled
-	)
-	_add_checkbox(editor, "As Normal Map", "Used as ripples (normal map). Keep on.", noise_texture.as_normal_map, func(enabled: bool) -> void:
-		noise_texture.as_normal_map = enabled
-	)
-
-	_add_object_int_row(editor, noise_texture, "Width", "width", 32, 2048, 256, "Texture width (pixels).")
-	_add_object_int_row(editor, noise_texture, "Height", "height", 32, 2048, 256, "Texture height (pixels).")
-
-	var fast_noise := noise_texture.noise as FastNoiseLite
-	if fast_noise == null:
-		_add_button(editor, "Add Noise", "Give the ripple texture a noise to draw.", func() -> void:
-			if not is_instance_valid(terrain):
-				return
-			if noise_texture.noise == null:
-				noise_texture.noise = MaterialFactory.make_water_noise()
-			terrain.notify_property_list_changed()
-		)
-		return
-
-	var noise_editor := _add_section(editor, "Ripple Noise", true, "")
-	var frequency_spin := _add_spin_row(noise_editor, "Frequency", "Ripple scale. Lower = broader waves.", 0.001, 1.0, 0.001, float(fast_noise.frequency))
-	frequency_spin.value_changed.connect(func(value: float) -> void: fast_noise.frequency = value)
-	_add_object_int_row(noise_editor, fast_noise, "Detail Levels", "fractal_octaves", 1, 10, 0, "Layers of finer ripples.")
-	_add_object_int_row(noise_editor, fast_noise, "Seed", "seed", -2147483648, 2147483647, 0, "Another ripple pattern.")
+	row.add_child(option)
 
 # -----------------------------------------------------------------------------
 # Widgets
@@ -627,13 +560,6 @@ func _add_int_row(parent: VBoxContainer, terrain: Node3D, label_text: String, ke
 	var spin := _add_spin_row(parent, label_text, tooltip, min_value, max_value, 1, Meta.get_int(terrain, key, default_value))
 	spin.value_changed.connect(on_changed)
 
-## Integer property of a resource (NoiseTexture2D / FastNoiseLite).
-func _add_object_int_row(parent: VBoxContainer, object: Object, label_text: String, property_name: String, min_value: int, max_value: int, default_value: int, tooltip: String) -> void:
-	var current: Variant = object.get(property_name)
-	var current_value: int = current if current != null else default_value
-	var spin := _add_spin_row(parent, label_text, tooltip, min_value, max_value, 1, current_value)
-	spin.value_changed.connect(func(value: float) -> void: object.set(property_name, int(value)))
-
 ## `feature_style` pickers edit alpha and keep the default height.
 func _add_color_row(parent: VBoxContainer, terrain: Node3D, label_text: String, key: String, default_value: Color, tooltip: String, on_changed: Callable, feature_style: bool = false) -> void:
 	var row := _add_row(parent, label_text, tooltip)
@@ -647,23 +573,6 @@ func _add_color_row(parent: VBoxContainer, terrain: Node3D, label_text: String, 
 		picker.custom_minimum_size = COLOR_PICKER_SIZE
 	picker.color_changed.connect(on_changed)
 	row.add_child(picker)
-
-## Custom Material slot: assigning / clearing applies at once (no rebuild);
-## clicking the material opens it in the Inspector.
-func _add_material_row(parent: VBoxContainer, terrain: Node3D, label_text: String, key: String, tooltip: String) -> void:
-	var label := Label.new()
-	label.text = label_text
-	label.tooltip_text = tooltip
-	parent.add_child(label)
-	var picker := EditorResourcePicker.new()
-	picker.base_type = "Material"
-	var edited_object: Object = Meta.get_optional(terrain, key)
-	picker.edited_resource = edited_object as Resource
-	picker.tooltip_text = tooltip
-	picker.resource_changed.connect(func(resource: Resource) -> void: host.set_custom_material(terrain, key, resource))
-	# Deferred: switching the Inspector frees this panel.
-	picker.resource_selected.connect(func(resource: Resource, _inspect: bool) -> void: EditorInterface.edit_resource.call_deferred(resource))
-	parent.add_child(picker)
 
 func _add_texture_row(parent: VBoxContainer, terrain: Node3D, label_text: String, key: String, tooltip: String, on_changed: Callable) -> EditorResourcePicker:
 	var label := Label.new()

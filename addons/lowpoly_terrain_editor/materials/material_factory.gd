@@ -5,6 +5,7 @@ extends RefCounted
 const Meta = preload("../core/terrain_meta.gd")
 const StylePalette = preload("../styles/style_palette.gd")
 const FeatureStyle = preload("../styles/feature_style.gd")
+const TerrainBiome = preload("../biomes/terrain_biome.gd")
 const RiverWaterShader = preload("river_water.gdshader")
 ## Same water without the screen-texture refraction: no screen copy pass,
 ## much cheaper on mobile GPUs and the Compatibility renderer.
@@ -18,6 +19,8 @@ static var _generated_water_normal: Texture2D = null
 ## a description of their properties. Sharing (instead of one copy per
 ## surface) keeps generated scenes small and lets the renderer batch state.
 static var _terrain_material_cache: Dictionary = {}
+## Water Material instance id -> its copy without refraction.
+static var _no_refraction_copies: Dictionary = {}
 
 ## Wind profiles of the detail material: shader parameters per kind of plant
 ## (see materials/detail_wind.gdshader; `height` = top of the built-in mesh,
@@ -45,12 +48,16 @@ const WATER_NORMAL_SIZE := 256
 ## blended per vertex, up to this many (the next ones keep a surface of their
 ## own, with hard cell borders). The 8th CUSTOM channel is the waterhole tint.
 const MAX_SPLAT_LAYERS := 7
+## Blended layers that can have a normal / roughness map (7 albedo + 8 = 15
+## texture slots, within the 16 of phones).
+const MAX_PBR_LAYERS := 4
 const TerrainSplatShader = preload("terrain_splat.gdshader")
-## cull mode -> Shader (the file is cull_back).
+## "cull|pbr" -> Shader (the file is cull_back, without USE_PBR).
 static var _splat_shaders: Dictionary = {}
 
 static func clear_cache() -> void:
 	_terrain_material_cache.clear()
+	_no_refraction_copies.clear()
 
 static func _cull_mode(terrain: Node3D) -> BaseMaterial3D.CullMode:
 	return BaseMaterial3D.CULL_DISABLED if Meta.get_bool(terrain, Meta.DOUBLE_SIDED, false) else BaseMaterial3D.CULL_BACK
@@ -68,9 +75,29 @@ static func terrain_style_texture(terrain: Node3D, style_id: int, top: bool) -> 
 	var texture: Object = _style(terrain, style_id).get("top_texture" if top else "cliff_texture", null)
 	return texture as Texture2D
 
-## Flat colour of the top or side faces of a palette style.
+## Normal map (`roughness` false) or roughness map of the top / side faces
+## of a palette style: from the biome ground style it was painted with
+## (palette "biome_style"), so they follow the biome; null for a Custom style.
+static func terrain_style_surface(terrain: Node3D, style_id: int, top: bool, roughness: bool) -> Texture2D:
+	var linked: String = _style(terrain, style_id).get("biome_style", "")
+	if linked.is_empty():
+		return null
+	for ground: TerrainBiome.GroundStyle in TerrainBiome.of(terrain).ground_styles:
+		if ground != null and String(ground.name) == linked:
+			if top:
+				return ground.top_roughness if roughness else ground.top_normal
+			return ground.side_roughness if roughness else ground.side_normal
+	return null
+
+## Flat colour of the top or side faces of a palette style. A textured face
+## gives its texture's mean colour (StylePalette.fill_texture_means): far
+## ground, grass tint and borders match the texture without tuning.
 static func terrain_style_color(terrain: Node3D, style_id: int, top: bool) -> Color:
-	return _style(terrain, style_id).get("top_color" if top else "cliff_color", Color.WHITE)
+	var style := _style(terrain, style_id)
+	var side := "top" if top else "cliff"
+	if style.get(side + "_texture", null) != null and style.has(side + "_mean"):
+		return style[side + "_mean"]
+	return style.get(side + "_color", Color.WHITE)
 
 ## Compiles `material`'s shader now (a StandardMaterial3D compiles on first
 ## use, ~25 ms on a laptop; a game loading over several frames does it in a
@@ -82,10 +109,9 @@ static func compile(material: Material) -> void:
 
 ## Shared material for untextured terrain faces: the style colour comes from
 ## the vertex colours, so every untextured style fits in one surface.
-## The terrain's Ground Material (Meta.GROUND_MATERIAL) when one is set.
+## The biome's Ground Material when one is set, else the built-in one.
 static func terrain_vertex_color_material(terrain: Node3D) -> Material:
-	var custom_object: Object = Meta.get_optional(terrain, Meta.GROUND_MATERIAL)
-	var custom := custom_object as Material
+	var custom := TerrainBiome.of(terrain).ground_material
 	if custom:
 		return custom
 	var cull := _cull_mode(terrain)
@@ -181,7 +207,10 @@ static func terrain_style_material(terrain: Node3D, style_id: int, top: bool) ->
 	# accidentally multiplied by the grass/brown fallback colour.
 	var albedo: Color = Color.WHITE if texture else terrain_style_color(terrain, style_id, top)
 	var cull := _cull_mode(terrain)
-	var key := "style|%s|%s|%s|%d" % [top, albedo.to_html(true), StylePalette.resource_identity(texture), cull]
+	var normal_map := terrain_style_surface(terrain, style_id, top, false) if texture else null
+	var roughness_map := terrain_style_surface(terrain, style_id, top, true) if texture else null
+	var key := "style|%s|%s|%s|%d|%s|%s" % [top, albedo.to_html(true), StylePalette.resource_identity(texture), cull,
+		StylePalette.resource_identity(normal_map), StylePalette.resource_identity(roughness_map)]
 	var material: StandardMaterial3D = _terrain_material_cache.get(key, null)
 	if material:
 		return material
@@ -198,9 +227,24 @@ static func terrain_style_material(terrain: Node3D, style_id: int, top: bool) ->
 		material.vertex_color_is_srgb = true
 	material.roughness = 1.0
 	_matte(material)
+	if normal_map:
+		# Needs the planar tangents (MeshUtils.planar_tangents).
+		material.normal_enabled = true
+		material.normal_texture = normal_map
+	if roughness_map:
+		material.roughness_texture = roughness_map
+		material.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	if normal_map or roughness_map:
+		material.specular_mode = BaseMaterial3D.SPECULAR_SCHLICK_GGX
 	material.cull_mode = cull
 	_terrain_material_cache[key] = material
 	return material
+
+## True when the material of a textured style reads a normal map (its
+## surface then needs real tangents).
+static func needs_tangents(material: Material) -> bool:
+	var standard := material as StandardMaterial3D
+	return standard != null and standard.normal_enabled
 
 ## Style ids of the blended texture layers (layer i = entry i): the styles
 ## with a top texture, in palette order, MAX_SPLAT_LAYERS at most. Only reads
@@ -215,22 +259,49 @@ static func splat_layers(terrain: Node3D) -> Array[int]:
 			layers.append(style_id)
 	return layers
 
+## Indices (in splat_layers()) of the blended layers with a normal or
+## roughness map, MAX_PBR_LAYERS at most: the blended surface uses the PBR
+## variant of its shader when there is one. Same mesh either way.
+static func splat_pbr_layers(terrain: Node3D) -> Array[int]:
+	var result: Array[int] = []
+	var layers := splat_layers(terrain)
+	for i in layers.size():
+		if result.size() >= MAX_PBR_LAYERS:
+			break
+		if terrain_style_surface(terrain, layers[i], true, false) != null or terrain_style_surface(terrain, layers[i], true, true) != null:
+			result.append(i)
+	return result
+
+static func splat_pbr(terrain: Node3D) -> bool:
+	return not splat_pbr_layers(terrain).is_empty()
+
 ## Material of the blended-texture surface of the chunks (TerrainShading
 ## weights): the top textures of splat_layers() and their tile sizes.
 ## Shared by every chunk with the same textures.
+## A Ground Material (biome) whose shader declares `layer_0` is written for
+## textures too: it also draws the blended surface, with the same uniforms
+## and CUSTOM0 / CUSTOM1 weights (a copy, refreshed from it at each build).
 static func terrain_splat_material(terrain: Node3D) -> Material:
 	var layers := splat_layers(terrain)
+	var pbr_layers := splat_pbr_layers(terrain)
+	var pbr := not pbr_layers.is_empty()
 	var cull := _cull_mode(terrain)
-	var key := "splat|%d" % cull
+	var custom := _custom_splat_material(terrain)
+	var key := "splat|%d|%s|%d" % [cull, pbr, custom.get_instance_id() if custom else 0]
 	for style_id in layers:
 		key += "|%s:%s" % [StylePalette.resource_identity(terrain_style_texture(terrain, style_id, true)),
 			terrain_style_tile_size(terrain, style_id, true)]
-	var cached: ShaderMaterial = _terrain_material_cache.get(key, null)
-	if cached:
-		return cached
-	var material := ShaderMaterial.new()
-	material.resource_name = "Terrain Blended Textures"
-	material.shader = _splat_shader(cull)
+		key += ":%s:%s" % [StylePalette.resource_identity(terrain_style_surface(terrain, style_id, true, false)),
+			StylePalette.resource_identity(terrain_style_surface(terrain, style_id, true, true))]
+	var material: ShaderMaterial = _terrain_material_cache.get(key, null)
+	if material == null:
+		material = ShaderMaterial.new()
+		material.resource_name = "Terrain Blended Textures"
+		_terrain_material_cache[key] = material
+	if custom:
+		_copy_material_values(custom, material)
+	else:
+		material.shader = _splat_shader(cull, pbr)
 	var inv_tiles: Array[float] = []
 	for i in MAX_SPLAT_LAYERS + 1:
 		var tile := 4.0
@@ -240,17 +311,46 @@ static func terrain_splat_material(terrain: Node3D) -> Material:
 		inv_tiles.append(1.0 / maxf(tile, 0.001))
 	material.set_shader_parameter("inv_tile_a", Vector4(inv_tiles[0], inv_tiles[1], inv_tiles[2], inv_tiles[3]))
 	material.set_shader_parameter("inv_tile_b", Vector4(inv_tiles[4], inv_tiles[5], inv_tiles[6], inv_tiles[7]))
-	_terrain_material_cache[key] = material
+	if pbr:
+		var slots := Vector4i(-1, -1, -1, -1)
+		for slot in pbr_layers.size():
+			var style_id := layers[pbr_layers[slot]]
+			slots[slot] = pbr_layers[slot]
+			material.set_shader_parameter("normal_%d" % slot, terrain_style_surface(terrain, style_id, true, false))
+			material.set_shader_parameter("rough_%d" % slot, terrain_style_surface(terrain, style_id, true, true))
+		material.set_shader_parameter("pbr_layer", slots)
 	return material
 
-static func _splat_shader(cull: BaseMaterial3D.CullMode) -> Shader:
-	if cull == BaseMaterial3D.CULL_BACK:
+static func _custom_splat_material(terrain: Node3D) -> ShaderMaterial:
+	var custom := TerrainBiome.of(terrain).ground_material as ShaderMaterial
+	if custom == null or custom.shader == null:
+		return null
+	for uniform: Dictionary in custom.shader.get_shader_uniform_list():
+		if uniform["name"] == "layer_0":
+			return custom
+	return null
+
+## `target` takes the shader and every uniform value of `source`.
+static func _copy_material_values(source: ShaderMaterial, target: ShaderMaterial) -> void:
+	target.shader = source.shader
+	target.render_priority = source.render_priority
+	target.next_pass = source.next_pass
+	for uniform: Dictionary in source.shader.get_shader_uniform_list():
+		var uniform_name: String = uniform["name"]
+		target.set_shader_parameter(uniform_name, source.get_shader_parameter(uniform_name))
+
+static func _splat_shader(cull: BaseMaterial3D.CullMode, pbr: bool = false) -> Shader:
+	if cull == BaseMaterial3D.CULL_BACK and not pbr:
 		return TerrainSplatShader
-	var shader: Shader = _splat_shaders.get(cull, null)
+	var key := "%d|%s" % [cull, pbr]
+	var shader: Shader = _splat_shaders.get(key, null)
 	if shader == null:
 		shader = Shader.new()
-		shader.code = TerrainSplatShader.code.replace("cull_back", "cull_disabled")
-		_splat_shaders[cull] = shader
+		var code := TerrainSplatShader.code.replace("cull_back", "cull_disabled") if cull != BaseMaterial3D.CULL_BACK else TerrainSplatShader.code
+		if pbr:
+			code = code.replace("shader_type spatial;", "shader_type spatial;\n#define USE_PBR")
+		shader.code = code
+		_splat_shaders[key] = shader
 	return shader
 
 ## Fully rough ground, roads and details: no specular term (invisible at
@@ -271,16 +371,29 @@ static func terrain_style_tile_size(terrain: Node3D, style_id: int, top: bool) -
 	var tile_size: float = style.get("top_tile_size" if top else "cliff_tile_size", Meta.DEFAULT_TILE_SIZE)
 	return maxf(tile_size, 0.001)
 
-## Shared per look (colour, texture, cull mode), like the ground materials: a
-## StandardMaterial3D's shader is freed with the last material using it, so a
-## new material per rebuild would compile it again (~25 ms).
+## Material of a road. A road that follows the biome (FeatureStyle.
+## follows_biome) gets the biome's Road Material, else the built-in one with
+## its Road Color; an older road with its own look keeps it.
+## Built-in ones are shared per look (colour, texture, cull mode), like the
+## ground materials: a StandardMaterial3D's shader is freed with the last
+## material using it, so a new material per rebuild would compile it again
+## (~25 ms).
 static func road_material(terrain: Node3D, feature_variant: Variant) -> Material:
 	var feature := FeatureStyle.migrate(feature_variant, FeatureStyle.ROAD)
+	if FeatureStyle.follows_biome(feature):
+		var biome := TerrainBiome.of(terrain)
+		if biome.road_material:
+			return biome.road_material
+		return built_in_road_material(biome.road_color, null, _cull_mode(terrain))
 	var texture_object: Object = feature.get("texture", null)
 	var texture := texture_object as Texture2D
 	var color: Color = Color.WHITE if texture else feature.get("color", Meta.DEFAULT_ROAD_COLOR)
-	var cull := _cull_mode(terrain)
-	var key := "road|%s|%d|%d" % [color.to_html(), texture.get_instance_id() if texture else 0, cull]
+	return built_in_road_material(color, texture, _cull_mode(terrain))
+
+## The built-in matte road material (shared per look). `uv_scale` repeats
+## the texture (1 / tile size when the UV is in meters).
+static func built_in_road_material(color: Color, texture: Texture2D, cull: BaseMaterial3D.CullMode = BaseMaterial3D.CULL_BACK, uv_scale: float = 1.0) -> StandardMaterial3D:
+	var key := "road|%s|%d|%d|%.5f" % [color.to_html(), texture.get_instance_id() if texture else 0, cull, uv_scale]
 	var material: StandardMaterial3D = _terrain_material_cache.get(key, null)
 	if material:
 		return material
@@ -289,10 +402,33 @@ static func road_material(terrain: Node3D, feature_variant: Variant) -> Material
 	material.albedo_color = color
 	material.albedo_texture = texture
 	material.texture_repeat = true
+	material.uv1_scale = Vector3(uv_scale, uv_scale, 1.0)
 	material.roughness = 1.0
 	_matte(material)
 	material.cull_mode = cull
 	_terrain_material_cache[key] = material
+	return material
+
+## A road material to edit (Customise Road): the built-in look, not shared.
+static func editable_road_material(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.resource_name = "Road"
+	material.albedo_color = color
+	material.texture_repeat = true
+	# Road UVs are in meters: a texture repeats every 4 m (UV1 > Scale).
+	material.uv1_scale = Vector3.ONE / Meta.DEFAULT_ROAD_TILE_SIZE
+	material.roughness = 1.0
+	_matte(material)
+	return material
+
+## A copy of the built-in water to edit (Customise Water): its shader and
+## values, with an editable ripple texture (NoiseTexture2D).
+static func editable_water_material(color: Color) -> ShaderMaterial:
+	var material := built_in_water_material({"color": color})
+	material.resource_name = "Water"
+	material.shader = RiverWaterShader
+	material.set_shader_parameter("refraction_strength", Meta.DEFAULT_RIVER_REFRACTION)
+	material.set_shader_parameter("normal_texture", make_water_normal_texture())
 	return material
 
 ## Seamless NoiseTexture2D + FastNoiseLite normal map, the same kind of resource
@@ -332,10 +468,55 @@ static func generated_water_normal() -> Texture2D:
 static func phone_water() -> bool:
 	return OS.has_feature("mobile")
 
-## Water material of a river. `mobile_water` (terrain setting), a refraction
-## of 0 or a phone selects the shader without screen-texture refraction.
-static func river_material(feature_variant: Variant, mobile_water: bool = false) -> Material:
+## Water material of a river. A river that follows the biome gets the
+## biome's Water Material, else the built-in water with its Water Color; an
+## older river with its own look keeps it. `mobile_water` (terrain setting), a
+## refraction of 0 or a phone selects the built-in shader without
+## screen-texture refraction (also in a Water Material made from it).
+static func river_material(terrain: Node3D, feature_variant: Variant, mobile_water: bool = false) -> Material:
 	var feature := FeatureStyle.migrate(feature_variant, FeatureStyle.RIVER)
+	if FeatureStyle.follows_biome(feature):
+		var biome := TerrainBiome.of(terrain)
+		if biome.water_material:
+			return _without_refraction(biome.water_material) if mobile_water or phone_water() or _refraction_off(biome.water_material) else biome.water_material
+		return built_in_water_material({"color": biome.water_color}, mobile_water)
+	return built_in_water_material(feature, mobile_water)
+
+## True for the built-in water shader with Refraction Strength 0: the
+## shader without refraction looks the same and skips the screen copy.
+static func _refraction_off(material: Material) -> bool:
+	var shader_material := material as ShaderMaterial
+	if shader_material == null or shader_material.shader != RiverWaterShader:
+		return false
+	var strength: Variant = shader_material.get_shader_parameter("refraction_strength")
+	return (strength is float or strength is int) and float(str(strength)) <= 0.0
+
+## A Water Material made from the built-in water shader, switched to the
+## shader without refraction (a copy, so it always has the current values;
+## the shader itself is shared).
+static func _without_refraction(material: Material) -> Material:
+	var shader_material := material as ShaderMaterial
+	if shader_material == null or shader_material.shader != RiverWaterShader:
+		return material
+	# One copy per Water Material (one draw state for every river), its
+	# values copied again at each build.
+	var copy: ShaderMaterial = _no_refraction_copies.get(shader_material.get_instance_id(), null)
+	if copy == null:
+		copy = ShaderMaterial.new()
+		copy.resource_name = shader_material.resource_name
+		copy.shader = RiverWaterMobileShader
+		_no_refraction_copies[shader_material.get_instance_id()] = copy
+	copy.render_priority = shader_material.render_priority
+	copy.next_pass = shader_material.next_pass
+	for uniform: Dictionary in RiverWaterMobileShader.get_shader_uniform_list():
+		var uniform_name: String = uniform["name"]
+		copy.set_shader_parameter(uniform_name, shader_material.get_shader_parameter(uniform_name))
+	return copy
+
+## The built-in water: `look` holds the river look fields (FeatureStyle.
+## RIVER_LOOK_FIELDS); missing ones take their defaults.
+static func built_in_water_material(look: Dictionary, mobile_water: bool = false) -> ShaderMaterial:
+	var feature := look
 	var material := ShaderMaterial.new()
 	material.resource_name = "LowPoly River Water"
 	var raw_refraction: float = feature.get("refraction", Meta.DEFAULT_RIVER_REFRACTION)

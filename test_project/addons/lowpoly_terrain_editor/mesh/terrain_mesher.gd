@@ -95,7 +95,7 @@ static func build_chunk_arrays(terrain: Node3D, carve: PackedFloat32Array, chunk
 	var top_groups: Dictionary = {}
 	var cliff_groups: Dictionary = {}
 	var top_offset: float = Meta.get_float(terrain, Meta.TOP_Y_OFFSET, 0.0)
-	var up_bias: float = clampf(Meta.get_float(terrain, Meta.TOP_NORMAL_UP_BIAS, 0.0), 0.0, 1.0)
+	var up_bias: float = clampf(MaterialFactory.TerrainBiome.of(terrain).flat_top_lighting, 0.0, 1.0)
 	var shading := TerrainShading.prepare(terrain, carve, min_x, min_z, max_x, max_z)
 	var shaded := shading != null
 	var base_y: float = terrain.get_meta(Meta.BASE_Y, Meta.DEFAULT_BASE_Y)
@@ -430,6 +430,8 @@ static func assemble_packed(terrain: Node3D, packed: Dictionary) -> Dictionary:
 			continue
 		var material := MaterialFactory.terrain_vertex_color_material(terrain) if style_id < 0 \
 			else MaterialFactory.terrain_style_material(terrain, style_id, is_top)
+		if style_id >= 0 and MaterialFactory.needs_tangents(material):
+			surface_tangents = MeshUtils.planar_tangents(normals, is_top)
 		MeshUtils.add_arrays_surface(array_mesh, vertices, normals, material, uvs, colors, surface_tangents)
 	return {"mesh": array_mesh, "shading": packed["shading"], "faces": packed["faces"], "caster": packed["caster"],
 		"field": packed.get("field", [])}

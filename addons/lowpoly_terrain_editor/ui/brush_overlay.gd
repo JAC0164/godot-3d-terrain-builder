@@ -14,6 +14,7 @@ extends RefCounted
 const Meta = preload("../core/terrain_meta.gd")
 const ToolMode = preload("../editing/tool_mode.gd")
 const SurfaceRay = preload("../editing/surface_ray.gd")
+const TerrainBiome = preload("../biomes/terrain_biome.gd")
 
 const SEGMENTS := 56
 const LIFT := 0.06
@@ -86,10 +87,10 @@ static func _tool_color(terrain: Node3D, mode: ToolMode.Mode, info: Dictionary) 
 			var paint: Color = terrain.get_meta(Meta.BRUSH_TOP_COLOR, Color(0.9, 0.9, 0.9))
 			return Color(paint.lightened(0.15), 1.0)
 		ToolMode.Mode.ROAD:
-			var road_color: Color = terrain.get_meta(Meta.ROAD_COLOR, Meta.DEFAULT_ROAD_COLOR)
+			var road_color: Color = TerrainBiome.of(terrain).road_color
 			return Color(road_color.lightened(0.5), 1.0)
 		ToolMode.Mode.RIVER:
-			var river_color: Color = terrain.get_meta(Meta.RIVER_COLOR, Meta.DEFAULT_RIVER_COLOR)
+			var river_color: Color = TerrainBiome.of(terrain).water_color
 			return Color(river_color.lightened(0.35), 1.0)
 		ToolMode.Mode.ERASE:
 			return FEATURE_ERASE_COLOR if info.get("over_feature", false) else COLORS[mode]

@@ -91,10 +91,17 @@ func _build(variant: String) -> int:
 	_terrain.name = "LowpolyTerrain"
 	_root.add_child(_terrain)
 	TerrainData.initialize(_terrain)
-	if variant != "sans_texture":
-		_terrain.set_meta(Meta.ROAD_TEXTURE, load(TEX % ROAD_TEXTURE))
-		_terrain.set_meta(Meta.ROAD_TILE_SIZE, 4.0)
 	MapGenerator.generate(_terrain, _recipe(variant), SEED)
+	if variant != "sans_texture":
+		# After the map (it sets the biome): road texture, one tile every 4 m (road UVs are in meters).
+		var road := StandardMaterial3D.new()
+		road.albedo_texture = load(TEX % ROAD_TEXTURE)
+		road.uv1_scale = Vector3.ONE / 4.0
+		road.texture_repeat = true
+		road.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+		var biome: Resource = (_terrain.get_meta(Meta.BIOME) as Resource).duplicate()
+		biome.set("road_material", road)
+		_terrain.set_meta(Meta.BIOME, biome)
 	TerrainBuilder.new().rebuild_all(_terrain)
 	_heights = _terrain.get_meta(Meta.HEIGHTS)
 	_resolution = _terrain.get_meta(Meta.RESOLUTION)

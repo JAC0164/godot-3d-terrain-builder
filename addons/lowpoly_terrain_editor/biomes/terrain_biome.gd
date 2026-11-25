@@ -6,9 +6,12 @@ extends Resource
 ## - detail layers: what grows / lies on the ground (grass, rocks, shrubs,
 ##   skulls, trees...), each drawn with one MultiMesh per chunk;
 ## - baked shading and waterhole colors, read live by every terrain that
-##   uses the biome: editing them here changes those terrains at once.
-## Lighting (sky, fog, sun) is not part of a biome: it depends on the game
-## (camera, time of day), so each project sets up its own WorldEnvironment.
+##   uses the biome: editing them here changes those terrains at once;
+## - materials and ambience: your own ground / detail / road / water
+##   materials and an optional Environment (sky, fog, light) for the game.
+## It is the terrain's theme: cells painted with a ground style follow it
+## (StylePalette.sync_with_biome), so swapping or editing the biome restyles
+## the whole terrain; the ground, roads and collisions do not change.
 ##
 ## Terrains without a biome use `default_biome()` ("Temperate"). A biome file
 ## is shared by every terrain using it; "Copy Biome to This Terrain" (Inspector
@@ -99,6 +102,59 @@ static var _default: LowpolyTerrainBiome = null
 		waterhole_crack_color = value
 		emit_changed()
 
+@export_group("Materials & Ambience")
+## Your own material for the whole ground (toon, unshaded, palette...),
+## textured styles included. Its shader reads COLOR (style color x baked
+## shading); with textured styles it also gets the layer textures and their
+## weights, like the built-in one (materials/terrain_splat.gdshader).
+## Empty = the built-in matte look.
+@export var ground_material: Material:
+	set(value):
+		ground_material = value
+		emit_changed()
+## Your own material for every detail layer except custom models / meshes
+## that keep their own (COLOR = mesh color x instance color). The built-in
+## wind is part of the built-in materials. Empty = built-in.
+@export var detail_material: Material:
+	set(value):
+		detail_material = value
+		emit_changed()
+## Color of the roads (built-in road material).
+@export var road_color := Meta.DEFAULT_ROAD_COLOR:
+	set(value):
+		road_color = value
+		emit_changed()
+## Your own road material (texture, shader...). Its UV is in meters, seen
+## from above. Empty = Road Color, matte.
+@export var road_material: Material:
+	set(value):
+		road_material = value
+		emit_changed()
+## Tint and transparency of the water (built-in water).
+@export var water_color := Meta.DEFAULT_RIVER_COLOR:
+	set(value):
+		water_color = value
+		emit_changed()
+## Your own water material. Inspector > Roads, Rivers & Waterholes >
+## Customise Water puts an editable copy of the built-in one here (waves,
+## flow, refraction...). Empty = the built-in water with Water Color.
+@export var water_material: Material:
+	set(value):
+		water_material = value
+		emit_changed()
+## 0 = each ground face lit by its own slope (low-poly look); 1 = all ground
+## lit as if flat.
+@export_range(0.0, 1.0, 0.05) var flat_top_lighting := 0.0:
+	set(value):
+		flat_top_lighting = value
+		emit_changed()
+## Sky, fog, light and glow of the game: the terrain's runtime node adds it
+## when the scene has no WorldEnvironment of its own. Empty = none.
+@export var environment: Environment:
+	set(value):
+		environment = value
+		emit_changed()
+
 ## Waterhole colors, keyed like the old terrain settings (migration).
 func waterhole_values() -> Dictionary:
 	return {
@@ -133,6 +189,11 @@ const LEGACY_LOOK_KEYS := {
 	"_lte_shade_cliff_lip": "cliff_lip",
 	"_lte_waterhole_clay_color": "waterhole_clay_color",
 	"_lte_waterhole_crack_color": "waterhole_crack_color",
+	"_lte_ground_material": "ground_material",
+	"_lte_detail_material": "detail_material",
+	"_lte_top_normal_up_bias": "flat_top_lighting",
+	"_lte_road_color": "road_color",
+	"_lte_river_color": "water_color",
 }
 
 ## Everything of the biome that is baked into the terrain meshes (shading +
@@ -143,7 +204,18 @@ func look_signature() -> String:
 	for key: String in LEGACY_LOOK_KEYS:
 		var property: String = LEGACY_LOOK_KEYS[key]
 		parts.append(str(get(property)))
+	for property: String in LOOK_PROPERTIES:
+		parts.append(str(get(property)))
+	# Painted cells follow their biome ground style (StylePalette.sync_with_biome).
+	for style: GroundStyle in ground_styles:
+		if style != null:
+			parts.append("%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s" % [style.name, style.top_color.to_html(), style.side_color.to_html(),
+				style.top_texture, style.side_texture, style.top_tile_size, style.side_tile_size,
+				style.top_normal, style.top_roughness, style.side_normal, style.side_roughness])
 	return "|".join(parts)
+
+## Baked look properties that never were terrain settings (no migration).
+const LOOK_PROPERTIES: Array[String] = ["macro_variation", "road_material", "water_material"]
 
 ## The biome a terrain uses (its own, else the built-in Temperate).
 static func of(terrain: Node) -> LowpolyTerrainBiome:
@@ -283,6 +355,7 @@ static func make_senegal_savanna() -> LowpolyTerrainBiome:
 	biome.cliff_lip = 0.12
 	biome.waterhole_clay_color = Color(0.64, 0.48, 0.34)
 	biome.waterhole_crack_color = Color(0.3, 0.19, 0.13)
+	biome.road_color = Color(0.66, 0.4, 0.26)
 	const RIM := DetailLayer.WaterholeZone.RIM_ONLY
 
 	var layers: Array[DetailLayer] = [

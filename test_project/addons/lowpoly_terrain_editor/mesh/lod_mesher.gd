@@ -104,7 +104,7 @@ static func block_data(terrain: Node3D, carve: PackedFloat32Array, block_x: int,
 		"corners": corners, "active": active, "colors": colors, "cliffs": cliffs,
 		"base_y": Meta.get_float(terrain, Meta.BASE_Y, Meta.DEFAULT_BASE_Y),
 		"cliff_offset": Meta.get_float(terrain, Meta.CLIFF_Y_OFFSET, 0.0),
-		"up_bias": clampf(Meta.get_float(terrain, Meta.TOP_NORMAL_UP_BIAS, 0.0), 0.0, 1.0),
+		"up_bias": clampf(MaterialFactory.TerrainBiome.of(terrain).flat_top_lighting, 0.0, 1.0),
 		"skirt": float(step) * world_size / float(maxi(cell_count, 1)),
 	}
 

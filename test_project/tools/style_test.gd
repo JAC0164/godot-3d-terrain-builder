@@ -87,8 +87,10 @@ func _rebuild(metas: Dictionary) -> void:
 # --- Custom Materials (the plugin's slots) -------------------------------------
 
 func _use_materials(ground: String, detail: String) -> void:
-	_terrain.set_meta(Meta.GROUND_MATERIAL, load("res://world/looks/%s.tres" % ground))
-	_terrain.set_meta(Meta.DETAIL_MATERIAL, load("res://world/looks/%s.tres" % detail))
+	var biome: TerrainBiome = TerrainBiome.of(_terrain).duplicate()
+	biome.ground_material = load("res://world/looks/%s.tres" % ground)
+	biome.detail_material = load("res://world/looks/%s.tres" % detail)
+	_terrain.set_meta(Meta.BIOME, biome)
 	TerrainBuilder.refresh_materials(_terrain)
 
 func _add_outline() -> void:

@@ -62,6 +62,8 @@ static func apply(terrain: Node3D, snapshot: Dictionary) -> void:
 	if snapshot.has("style_palette"):
 		var style_palette: Array = snapshot["style_palette"]
 		terrain.set_meta(Meta.STYLE_PALETTE, style_palette.duplicate(true))
+		# Styles edited in the biome since the snapshot: keep the biome's look.
+		StylePalette.sync_with_biome(terrain)
 
 static func equal(a: Dictionary, b: Dictionary) -> bool:
 	if a.is_empty() or b.is_empty():

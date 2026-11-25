@@ -90,7 +90,9 @@ func _initialize() -> void:
 				layer.draw_distance *= float(_args["distance_scale"])
 		_terrain.set_meta(Meta.BIOME, biome)
 	if _args["grain"] == "1":
-		_terrain.set_meta(Meta.GROUND_MATERIAL, load("res://world/looks/ground_detail.tres"))
+		var grained: Resource = (_terrain.get_meta(Meta.BIOME) as Resource).duplicate()
+		grained.set("ground_material", load("res://world/looks/ground_detail.tres"))
+		_terrain.set_meta(Meta.BIOME, grained)
 	var runtime := TerrainRuntime.new()
 	# Every detail at load (as the earlier measures; on by default since 2026-11-24).
 	runtime.stream_details = false

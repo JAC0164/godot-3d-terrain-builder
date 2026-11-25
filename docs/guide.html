@@ -147,35 +147,39 @@
           <table>
             <tbody>
               <tr><td><strong>Map</strong></td><td>Preset, seed, Generate Map.</td></tr>
-              <tr><td><strong>Look</strong></td><td>Biome, details, Smooth Ground, Ground Bumps, your own materials.</td></tr>
-              <tr><td><strong>Roads, Rivers &amp; Waterholes</strong></td><td>What the tools draw next.</td></tr>
+              <tr><td><strong>Look</strong></td><td>Biome (the whole theme), details, Smooth Ground, Ground Bumps.</td></tr>
+              <tr><td><strong>Roads, Rivers &amp; Waterholes</strong></td><td>What the tools draw next; Customise Road / Water.</td></tr>
               <tr><td><strong>Game</strong></td><td>Collision, Runtime Build, draw distance, mobile water, ground shadows, detail seed.</td></tr>
             </tbody>
           </table>
         </div>
-        <p>Everything else is in the closed <strong>Advanced</strong> section: Terrain Size, Shading, Heights &amp;
-          Offsets, Custom Ground Style, Road Look, River Water, Waterhole Shape, Details (size, "Details
-          Everywhere") and Pixel Map. Hover a section title or a setting for its explanation.</p>
+        <p>Everything else is in the closed <strong>Advanced</strong> section: Terrain Size, Heights &amp;
+          Offsets, Custom Ground Style, Waterhole Shape, Details and Pixel Map. Hover a section title or a
+          setting for its explanation. Everything about the look lives in the biome.</p>
       </section>
 
       <section id="biomes">
         <h2>Biomes</h2>
-        <p>The biome is the terrain's look: ground styles, baked shading (style blend, slope tint, ambient
-          occlusion, colour variation, large patches that keep bare ground from looking flat, cliff darkening), waterhole colours and what grows. Two come with the
+        <p>The biome is the terrain's whole theme: ground styles (colours, textures, normal and roughness
+          maps), baked shading (style blend, slope tint, ambient occlusion, colour variation, large patches
+          that keep bare ground from looking flat, cliff darkening), waterhole colours, what grows, your own
+          ground / detail / road / water materials and the ambience (an Environment). The terrain only holds
+          the shape: change the biome, the whole map changes with it, collisions untouched. Two come with the
           plugin: <code>biomes/presets/temperate.tres</code> (green grass, rock, sand, snow; used by new
           terrains) and <code>biomes/presets/senegal_savanna.tres</code> (dry grass, laterite, acacias, baobabs,
           termite mounds, skulls), an example of a themed biome. Pick one in <em>Look &gt; Biome</em>, or make
           your own.</p>
         <ul>
-          <li><strong>Look &gt; Edit Biome</strong> (or <em>Advanced &gt; Shading &gt; Edit Ground Shading</em>) opens
-            it; every change shows on the terrain at once.</li>
+          <li><strong>Look &gt; Edit Biome</strong> opens it; every change shows on the terrain at once, including
+            the cells already painted with one of its ground styles (Custom styles stay as painted).</li>
           <li>A biome file is shared by every terrain that uses it. <strong>Copy Biome to This Terrain</strong> gives
             one terrain its own copy, stored in the scene, to change it alone (<kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it).
             Do this before editing a preset: the plugin's preset files are replaced when you update the plugin.</li>
           <li>Without a biome, <strong>Create Editable Biome</strong> puts an editable Temperate copy in the terrain.</li>
-          <li>Scenes made with an older version are converted when opened: a terrain whose shading or
-            waterhole colours had been tuned by hand gets its own copy of the biome holding them, so it looks
-            the same (save the scene to keep the conversion).</li>
+          <li>Scenes made with an older version are converted when opened: a terrain whose shading,
+            waterhole colours, Ground / Detail Material or road / water colour had been tuned by hand gets its
+            own copy of the biome holding them, so it looks the same; roads and rivers drawn with another look
+            keep it (save the scene to keep the conversion).</li>
         </ul>
         <p>The biome's <strong>detail layers</strong> say what grows, how dense, on which ground and slope. You can
           make your own biomes from code too: the test project's <code>tools/trial_biomes.gd</code> builds
@@ -241,16 +245,27 @@
             <code>test_project/world/looks/ground_detail.tres</code> is an example that adds a fine soil grain
             (fading out in the distance) and large soft patches on top of the biome colours.</li>
         </ul>
-        <h3>Your game's own look</h3>
-        <p><em>Look &gt; Ground Material</em> and <em>Detail Material</em> replace the built-in materials (toon, unshaded,
-          palette, retro...), applied at once without rebuilding.</p>
+        <h3>Theme your terrain</h3>
+        <p>Everything below is in the biome (<em>Look &gt; Edit Biome</em>), so one biome file carries a whole
+          look from map to map.</p>
         <ul>
+          <li><strong>Realistic</strong>: give the ground styles a texture, and in their <em>Surface (optional)</em>
+            group a normal map and a roughness map from the same texture set. The blended ground then lights
+            them (on 4 of the 7 blended textures at most, to stay within what phones can sample); textured cliffs
+            too. Far away and under the grass, the texture's mean colour is used: no colour to match by hand.</li>
+          <li><strong>Materials &amp; Ambience</strong>: Ground Material and Detail Material replace the built-in
+            materials (toon, unshaded, palette, retro...). Road Color / Road Material and Water Color / Water
+            Material give the roads and rivers their look; <em>Customise Road</em> and <em>Customise Water</em>
+            (Roads, Rivers &amp; Waterholes) put an editable copy of the built-in one there to start from.
+            Environment (sky, fog, light) is applied in game when the scene has no WorldEnvironment of its own.</li>
           <li>The colours and baked shading stay in the vertex colours: use <em>Vertex Color &gt; Use as Albedo</em>
             + <em>Is sRGB</em> on a StandardMaterial3D, or read <code>COLOR</code> in a shader (convert it from sRGB).</li>
-          <li>Ground Material = untextured ground, cliffs and waterholes (textured styles keep their texture).
-            Detail Material = every detail layer except your own models and custom meshes with "Use Mesh
-            Materials". A custom Detail Material has no built-in wind unless its shader moves the vertices.
-            Roads and rivers keep their own materials.</li>
+          <li>Ground Material = untextured ground, cliffs and waterholes. A shader that declares
+            <code>uniform sampler2D layer_0</code> draws the blended textures too: it gets the same uniforms as
+            <code>materials/terrain_splat.gdshader</code> (<code>layer_0</code>... and <code>inv_tile_a/b</code>) and the
+            weights in <code>CUSTOM0</code> / <code>CUSTOM1</code>. Detail Material = every detail layer except your own
+            models and custom meshes with "Use Mesh Materials". A custom Detail Material has no built-in wind
+            unless its shader moves the vertices.</li>
           <li>Examples (game side, not in the plugin) in <code>test_project/world/looks/</code>: ground_toon,
             ground_unshaded, detail_toon, detail_unshaded, detail_toon_wind with its shader, and
             <code>outline.tscn</code> (cartoon outlines as a post-effect, put it under your Camera3D).</li>

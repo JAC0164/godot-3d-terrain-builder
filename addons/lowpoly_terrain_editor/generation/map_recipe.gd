@@ -85,7 +85,6 @@ const MapPatch = preload("map_patch.gd")
 ## Tracks from edge to edge (with Track Network: the map exits).
 @export_range(0, 16) var track_count := 1
 @export_range(0.25, 16.0, 0.05) var track_width := 2.6
-@export var track_color := Color(0.55, 0.45, 0.32)
 ## How much the tracks wind (0 = straight).
 @export_range(0.0, 1.0, 0.01) var track_meander := 0.5
 ## Tracks join the map exits and the waterholes, along the easy ground
@@ -136,7 +135,6 @@ static func make_senegal_savanna(savanna_biome: Resource) -> Resource:
 	]
 	recipe.track_count = 2
 	recipe.track_width = 2.6
-	recipe.track_color = Color(0.66, 0.4, 0.26)
 	recipe.track_meander = 0.55
 	recipe.waterholes_per_10k_cells = 1.6
 	recipe.waterhole_radius_min = 4.0
@@ -186,7 +184,6 @@ static func make_senegal_open_world(savanna_biome: Resource) -> Resource:
 	recipe.river_meander = 0.5
 	recipe.track_count = 4
 	recipe.track_width = 2.6
-	recipe.track_color = Color(0.66, 0.4, 0.26)
 	recipe.track_meander = 0.5
 	recipe.track_network = true
 	recipe.track_network_stops = 10
@@ -215,7 +212,6 @@ static func make_temperate_island(temperate_biome: Resource) -> Resource:
 	recipe.lowland_coverage = 0.08
 	recipe.lowland_depth = 0.5
 	recipe.track_count = 1
-	recipe.track_color = Color(0.55, 0.45, 0.32)
 	recipe.waterholes_per_10k_cells = 0.0
 	return recipe
 

@@ -128,6 +128,8 @@ func _set_owner_tree(node: Node, scene_root: Node, terrain: Node3D) -> void:
 func rebuild_all(terrain: Node3D) -> void:
 	if not is_instance_valid(terrain):
 		return
+	# Biome ground styles edited: painted cells follow them.
+	StylePalette.sync_with_biome(terrain)
 	if streams_in_editor(terrain) and _start_stream(terrain):
 		return
 	_stop_stream(terrain)
@@ -637,14 +639,14 @@ static func feature_material_warmups(terrain: Node3D) -> Array[Callable]:
 		# The generated wave texture (~20 ms), in a step of its own.
 		warmups.append(MaterialFactory.generated_water_normal)
 	for river: Variant in rivers:
-		warmups.append(_compile_river_material.bind(river, mobile_water))
+		warmups.append(_compile_river_material.bind(terrain, river, mobile_water))
 	return warmups
 
 static func _compile_road_material(terrain: Node3D, road: Variant) -> void:
 	MaterialFactory.compile(MaterialFactory.road_material(terrain, road))
 
-static func _compile_river_material(river: Variant, mobile_water: bool) -> void:
-	MaterialFactory.compile(MaterialFactory.river_material(river, mobile_water))
+static func _compile_river_material(terrain: Node3D, river: Variant, mobile_water: bool) -> void:
+	MaterialFactory.compile(MaterialFactory.river_material(terrain, river, mobile_water))
 
 ## rebuild_chunk_details() in slices, for a game loading over several frames
 ## (TerrainRuntime): job := start_chunk_details(), step_chunk_details(job,

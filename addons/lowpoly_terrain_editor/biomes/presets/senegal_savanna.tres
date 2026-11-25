@@ -314,3 +314,4 @@ cliff_darken = 0.3
 cliff_lip = 0.12
 waterhole_clay_color = Color(0.64, 0.48, 0.34, 1)
 waterhole_crack_color = Color(0.3, 0.19, 0.13, 1)
+road_color = Color(0.66, 0.4, 0.26, 1)

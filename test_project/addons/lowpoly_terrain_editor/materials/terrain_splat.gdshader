@@ -16,8 +16,17 @@ shader_type spatial;
 // Far fade: from `fade_start` to `fade_end` metres the textures turn into
 // their mean colour (no visible repeat from far / from above) and the layer
 // borders widen to a soft blend, like the untextured colours.
+// USE_PBR (MaterialFactory adds the define when a layer has a normal or
+// roughness map): up to 4 layers (`pbr_layer`: their index, -1 = none) also
+// read a normal + roughness map (7 + 8 = 15 texture slots, within the 16 of
+// phones), specular on. The normal maps use the projection from above
+// (tangent = local +X), no mesh tangents needed.
 // MaterialFactory swaps cull_back for cull_disabled (Double Sided).
+#ifdef USE_PBR
+render_mode diffuse_lambert, cull_back;
+#else
 render_mode diffuse_lambert, specular_disabled, cull_back;
+#endif
 
 uniform sampler2D layer_0 : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D layer_1 : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -26,6 +35,20 @@ uniform sampler2D layer_3 : source_color, filter_linear_mipmap_anisotropic, repe
 uniform sampler2D layer_4 : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D layer_5 : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D layer_6 : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+#ifdef USE_PBR
+uniform sampler2D normal_0 : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_1 : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_2 : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_3 : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D rough_0 : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D rough_1 : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D rough_2 : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D rough_3 : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+// Layer index of the normal / roughness maps 0-3 (-1 = unused slot).
+uniform ivec4 pbr_layer = ivec4(-1);
+// How much the normal maps bend the light (1 = as authored).
+uniform float normal_strength = 1.0;
+#endif
 // 1 / tile size (m) of layers 0-3 and 4-6 (w unused).
 uniform vec4 inv_tile_a = vec4(0.25);
 uniform vec4 inv_tile_b = vec4(0.25);
@@ -55,6 +78,7 @@ vec3 to_linear(vec3 c) {
 // Weights under 1/255 are interpolation leftovers: skipped.
 const float EPS = 0.002;
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+const vec3 FLAT_NORMAL = vec3(0.5, 0.5, 1.0);
 
 // One layer, faded by `fade`: colour, mean colour (its last mip) and the
 // height score (weight + relief).
@@ -66,6 +90,16 @@ void layer(sampler2D tex, float weight, float inv_tile, float fade, out vec3 col
 	score = weight + dot(c - mean, vec3(0.333)) * height_strength * (1.0 - fade);
 }
 
+#ifdef USE_PBR
+// Normal (encoded 0-1) and roughness of layer `index`, flat / mean far away.
+void surface(sampler2D normal_tex, sampler2D rough_tex, int index, float fade, out vec3 normal, out float rough) {
+	float inv_tile = index < 4 ? inv_tile_a[index] : inv_tile_b[index - 4];
+	vec2 uv = ground_xz * inv_tile;
+	normal = mix(texture(normal_tex, uv).rgb, FLAT_NORMAL, fade);
+	rough = mix(texture(rough_tex, uv).r, textureLod(rough_tex, uv, 14.0).r, fade);
+}
+#endif
+
 void fragment() {
 	float fade = smoothstep(fade_start, fade_end, length(VERTEX));
 	float depth = mix(blend_depth, far_blend_depth, fade);
@@ -73,10 +107,14 @@ void fragment() {
 	vec3 c[7];
 	vec3 m[7];
 	float s[7];
+	vec3 n[7];
+	float r[7];
 	for (int i = 0; i < 7; i++) {
 		c[i] = vec3(0.0);
 		m[i] = vec3(0.0);
 		s[i] = -10.0;
+		n[i] = FLAT_NORMAL;
+		r[i] = 1.0;
 	}
 	if (w[0] > EPS) layer(layer_0, w[0], inv_tile_a.x, fade, c[0], m[0], s[0]);
 	if (w[1] > EPS) layer(layer_1, w[1], inv_tile_a.y, fade, c[1], m[1], s[1]);
@@ -85,6 +123,14 @@ void fragment() {
 	if (w[4] > EPS) layer(layer_4, w[4], inv_tile_b.x, fade, c[4], m[4], s[4]);
 	if (w[5] > EPS) layer(layer_5, w[5], inv_tile_b.y, fade, c[5], m[5], s[5]);
 	if (w[6] > EPS) layer(layer_6, w[6], inv_tile_b.z, fade, c[6], m[6], s[6]);
+#ifdef USE_PBR
+	vec3 pn;
+	float pr;
+	if (pbr_layer.x >= 0 && w[pbr_layer.x] > EPS) { surface(normal_0, rough_0, pbr_layer.x, fade, pn, pr); n[pbr_layer.x] = pn; r[pbr_layer.x] = pr; }
+	if (pbr_layer.y >= 0 && w[pbr_layer.y] > EPS) { surface(normal_1, rough_1, pbr_layer.y, fade, pn, pr); n[pbr_layer.y] = pn; r[pbr_layer.y] = pr; }
+	if (pbr_layer.z >= 0 && w[pbr_layer.z] > EPS) { surface(normal_2, rough_2, pbr_layer.z, fade, pn, pr); n[pbr_layer.z] = pn; r[pbr_layer.z] = pr; }
+	if (pbr_layer.w >= 0 && w[pbr_layer.w] > EPS) { surface(normal_3, rough_3, pbr_layer.w, fade, pn, pr); n[pbr_layer.w] = pn; r[pbr_layer.w] = pr; }
+#endif
 	// The untextured (colour) part blends like a flat layer.
 	float textured_weight = dot(weights_a, vec4(1.0)) + dot(weights_b.xyz, vec3(1.0));
 	float plain = 1.0 - clamp(textured_weight, 0.0, 1.0);
@@ -95,11 +141,15 @@ void fragment() {
 	float floor_score = top - depth;
 	vec3 tex_sum = vec3(0.0);
 	vec3 mean_sum = vec3(0.0);
+	vec3 normal_sum = vec3(0.0);
+	float rough_sum = 0.0;
 	float tex_total = 0.0;
 	for (int i = 0; i < 7; i++) {
 		float b = max(s[i] - floor_score, 0.0);
 		tex_sum += c[i] * b;
 		mean_sum += m[i] * b;
+		normal_sum += n[i] * b;
+		rough_sum += r[i] * b;
 		tex_total += b;
 	}
 	vec3 base = to_linear(COLOR.rgb);
@@ -115,6 +165,17 @@ void fragment() {
 		vec3 tinted = base * (dot(detail, LUMA) / max(dot(mean, LUMA), 0.02));
 		albedo += mix(detail * shade, tinted, weights_b.w) * tex_total;
 	}
-	ALBEDO = albedo / max(tex_total + plain_b, 0.0001);
+	float total = max(tex_total + plain_b, 0.0001);
+	ALBEDO = albedo / total;
+#ifdef USE_PBR
+	// Projection from above: U along local +X, V along local +Z (Godot's
+	// binormal points to -V).
+	TANGENT = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(1.0, 0.0, 0.0, 0.0))).xyz);
+	BINORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(0.0, 0.0, -1.0, 0.0))).xyz);
+	NORMAL_MAP = (normal_sum + FLAT_NORMAL * plain_b) / total;
+	NORMAL_MAP_DEPTH = normal_strength;
+	ROUGHNESS = (rough_sum + plain_b) / total;
+#else
 	ROUGHNESS = 1.0;
+#endif
 }

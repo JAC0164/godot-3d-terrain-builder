@@ -6,6 +6,7 @@ const Meta = preload("terrain_meta.gd")
 const GridMath = preload("grid_math.gd")
 const StylePalette = preload("../styles/style_palette.gd")
 const TerrainBiome = preload("../biomes/terrain_biome.gd")
+const FeatureStyle = preload("../styles/feature_style.gd")
 
 ## Every terrain setting with its value on a new terrain. initialize() writes
 ## them all; ensure_defaults() adds the ones a scene is missing (made before
@@ -18,7 +19,6 @@ const SETTING_DEFAULTS := {
 	Meta.CLIFF_Y_OFFSET: 0.0,
 	Meta.FEATURE_Y_OFFSET: 0.0,
 	Meta.DOUBLE_SIDED: false,
-	Meta.TOP_NORMAL_UP_BIAS: 0.0,
 	Meta.BRUSH_TOP_COLOR: Meta.DEFAULT_TOP_COLOR,
 	Meta.BRUSH_CLIFF_COLOR: Meta.DEFAULT_CLIFF_COLOR,
 	Meta.BRUSH_TOP_TEXTURE: null,
@@ -38,19 +38,10 @@ const SETTING_DEFAULTS := {
 	Meta.GENERATOR_USE_SINGLE_STYLE: true,
 	Meta.ROAD_WIDTH: Meta.DEFAULT_ROAD_WIDTH,
 	Meta.ROAD_Y_OFFSET: Meta.DEFAULT_ROAD_Y_OFFSET,
-	Meta.ROAD_COLOR: Meta.DEFAULT_ROAD_COLOR,
-	Meta.ROAD_TILE_SIZE: Meta.DEFAULT_ROAD_TILE_SIZE,
 	Meta.ROAD_COLLISION: true,
 	Meta.RIVER_WIDTH: Meta.DEFAULT_RIVER_WIDTH,
 	Meta.RIVER_DEPTH: Meta.DEFAULT_RIVER_DEPTH,
 	Meta.RIVER_SURFACE_DROP: Meta.DEFAULT_RIVER_SURFACE_DROP,
-	Meta.RIVER_COLOR: Meta.DEFAULT_RIVER_COLOR,
-	Meta.RIVER_TILE_SIZE: Meta.DEFAULT_RIVER_TILE_SIZE,
-	Meta.RIVER_ROUGHNESS: Meta.DEFAULT_RIVER_ROUGHNESS,
-	Meta.RIVER_NORMAL_STRENGTH: Meta.DEFAULT_RIVER_NORMAL_STRENGTH,
-	Meta.RIVER_REFRACTION: Meta.DEFAULT_RIVER_REFRACTION,
-	Meta.RIVER_FLOW_SPEED: Meta.DEFAULT_RIVER_FLOW_SPEED,
-	Meta.RIVER_FLOW_ANGLE: Meta.DEFAULT_RIVER_FLOW_ANGLE,
 	Meta.RIVER_COLLISION: false,
 }
 
@@ -105,10 +96,12 @@ static func ensure_defaults(terrain: Node3D) -> void:
 	for shade_key: String in SHADE_DEFAULTS:
 		if not terrain.has_meta(shade_key): terrain.set_meta(shade_key, SHADE_DEFAULTS[shade_key])
 	migrate_look(terrain)
+	migrate_feature_look(terrain)
 	# Per-kind densities now live in the biome's detail layers.
 	for legacy_key: String in [Meta.LEGACY_DETAIL_GRASS_DENSITY, Meta.LEGACY_DETAIL_ROCK_DENSITY, Meta.LEGACY_LEVEL_PATH]:
 		if terrain.has_meta(legacy_key): terrain.remove_meta(legacy_key)
 	StylePalette.ensure_material_data(terrain)
+	StylePalette.sync_with_biome(terrain)
 
 	if not terrain.has_meta(Meta.CELL_ACTIVE):
 		var migrate_resolution: int = Meta.get_int(terrain, Meta.RESOLUTION, Meta.DEFAULT_RESOLUTION)
@@ -165,7 +158,7 @@ static func clamp_heights_to_limits(terrain: Node3D) -> void:
 ## String that changes whenever a setting affecting generated geometry changes.
 ## Used to detect Inspector edits made outside the plugin's own controls.
 static func tuning_signature(terrain: Node3D) -> String:
-	return "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % [
+	return "%s|%s|%s|%s|%s|%s|%s|%s|%s" % [
 		terrain.get_meta(Meta.BASE_Y, Meta.DEFAULT_BASE_Y),
 		terrain.get_meta(Meta.HEIGHT_MIN, Meta.DEFAULT_HEIGHT_MIN),
 		terrain.get_meta(Meta.HEIGHT_MAX, Meta.DEFAULT_HEIGHT_MAX),
@@ -173,7 +166,6 @@ static func tuning_signature(terrain: Node3D) -> String:
 		terrain.get_meta(Meta.CLIFF_Y_OFFSET, 0.0),
 		terrain.get_meta(Meta.FEATURE_Y_OFFSET, 0.0),
 		terrain.get_meta(Meta.DOUBLE_SIDED, false),
-		terrain.get_meta(Meta.TOP_NORMAL_UP_BIAS, 0.0),
 		terrain.get_meta(Meta.COLLISION_ENABLED, false),
 		terrain.get_meta(Meta.COLLISION_LAYER, 1),
 	] + "|%s|%s" % [terrain.get_meta(Meta.DETAIL_SEED, 0), terrain.get_meta(Meta.RUNTIME_BUILD, Meta.RUNTIME_BUILD_NOTHING)] + _shade_signature(terrain)
@@ -263,6 +255,70 @@ static func migrate_look(terrain: Node3D) -> bool:
 					copy_dict.erase(field)
 			cleaned.append(copy)
 		terrain.set_meta(Meta.WATERHOLES, cleaned)
+	return true
+
+## Terrain settings that held the look of the next road / river (moved to
+## the biome: Road Color, Road Material, Water Color, Water Material).
+const LEGACY_FEATURE_LOOK_KEYS: Array[String] = [
+	"_lte_road_color", "_lte_road_texture", "_lte_road_tile_size",
+	"_lte_river_color", "_lte_river_texture", "_lte_river_normal_texture", "_lte_river_tile_size",
+	"_lte_river_roughness", "_lte_river_normal_strength", "_lte_river_refraction",
+	"_lte_river_flow_speed", "_lte_river_flow_angle",
+]
+
+## Roads / rivers used to keep a copy of their look (color, texture, water
+## settings) and the terrain the look of the next ones. The biome holds it
+## now: a road / river with the biome's look drops its copy (it follows the
+## biome from then on); one with another look keeps it, so it looks the same.
+## The terrain settings are removed (new roads / rivers take the biome's
+## look). Returns true when the terrain changed.
+static func migrate_feature_look(terrain: Node3D) -> bool:
+	var changed := false
+	for key: String in LEGACY_FEATURE_LOOK_KEYS:
+		if terrain.has_meta(key):
+			terrain.remove_meta(key)
+			changed = true
+	var biome: TerrainBiome = TerrainBiome.of(terrain)
+	for feature_type: String in [FeatureStyle.ROAD, FeatureStyle.RIVER]:
+		var key := FeatureStyle.features_key(feature_type)
+		var features: Array = terrain.get_meta(key, [])
+		var cleaned: Array = []
+		var list_changed := false
+		for feature_variant: Variant in features:
+			if typeof(feature_variant) == TYPE_DICTIONARY:
+				var feature: Dictionary = feature_variant
+				if not FeatureStyle.follows_biome(feature) and _feature_has_biome_look(feature, feature_type, biome):
+					var copy: Dictionary = feature.duplicate(true)
+					for field: String in FeatureStyle.look_fields(feature_type):
+						copy.erase(field)
+					cleaned.append(copy)
+					list_changed = true
+					continue
+			cleaned.append(feature_variant)
+		if list_changed:
+			terrain.set_meta(key, cleaned)
+			changed = true
+	return changed
+
+static func _feature_has_biome_look(feature: Dictionary, feature_type: String, biome: TerrainBiome) -> bool:
+	var color: Color = feature.get("color", Color.BLACK)
+	if feature.get("texture", null) != null:
+		return false
+	if feature_type == FeatureStyle.ROAD:
+		return biome.road_material == null and color.is_equal_approx(biome.road_color)
+	if biome.water_material != null or not color.is_equal_approx(biome.water_color) or feature.get("normal_texture", null) != null:
+		return false
+	var defaults := {
+		"tile_size": Meta.DEFAULT_RIVER_TILE_SIZE,
+		"roughness": Meta.DEFAULT_RIVER_ROUGHNESS,
+		"normal_strength": Meta.DEFAULT_RIVER_NORMAL_STRENGTH,
+		"refraction": Meta.DEFAULT_RIVER_REFRACTION,
+		"flow_speed": Meta.DEFAULT_RIVER_FLOW_SPEED,
+		"flow_angle": Meta.DEFAULT_RIVER_FLOW_ANGLE,
+	}
+	for field: String in defaults:
+		if not _same_value(feature.get(field, defaults[field]), defaults[field]):
+			return false
 	return true
 
 static func _same_value(a: Variant, b: Variant) -> bool:

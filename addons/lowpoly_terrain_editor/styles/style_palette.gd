@@ -6,9 +6,18 @@ extends RefCounted
 ## PackedInt32Array that maps each cell to a palette index (-1 = unassigned).
 ## A style is captured into the palette when a cell becomes painted, so later
 ## brush changes never restyle existing cells.
+## A palette style equal to one of the biome's ground styles is linked to it
+## ("biome_style" = its name): sync_with_biome() keeps it equal when the biome
+## style is edited (or the biome swapped for one with a style of that name),
+## so the biome is the terrain's theme. Custom styles stay as painted.
 
 const Meta = preload("../core/terrain_meta.gd")
 const GridMath = preload("../core/grid_math.gd")
+const TerrainBiome = preload("../biomes/terrain_biome.gd")
+const GroundStyle = preload("../biomes/ground_style.gd")
+
+## resource identity -> mean colour of a texture (texture_mean_color).
+static var _mean_colors: Dictionary = {}
 
 static func make_default_style() -> Dictionary:
 	return {
@@ -136,9 +145,151 @@ static func capture_style_definition(
 		"cliff_tile_size": cliff_tile_size,
 		"signature": signature,
 	}
+	var linked := _biome_style_name(TerrainBiome.of(terrain), style)
+	if not linked.is_empty():
+		style["biome_style"] = linked
 	palette.append(style)
+	fill_texture_means(palette)
 	terrain.set_meta(Meta.STYLE_PALETTE, palette)
 	return palette.size() - 1
+
+# -----------------------------------------------------------------------------
+# Biome link (the biome is the terrain's theme)
+# -----------------------------------------------------------------------------
+
+## Name of the first biome ground style with exactly `style`'s colors,
+## textures and tile sizes, "" when none.
+static func _biome_style_name(biome: TerrainBiome, style: Dictionary) -> String:
+	for ground: GroundStyle in biome.ground_styles:
+		if ground != null and _same_as(style, ground):
+			return String(ground.name)
+	return ""
+
+static func _same_as(style: Dictionary, ground: GroundStyle) -> bool:
+	var top_color: Color = style.get("top_color", Meta.DEFAULT_TOP_COLOR)
+	var cliff_color: Color = style.get("cliff_color", Meta.DEFAULT_CLIFF_COLOR)
+	var top_tile: float = style.get("top_tile_size", Meta.DEFAULT_TILE_SIZE)
+	var cliff_tile: float = style.get("cliff_tile_size", Meta.DEFAULT_TILE_SIZE)
+	return (top_color.is_equal_approx(ground.top_color)
+		and cliff_color.is_equal_approx(ground.side_color)
+		and as_texture(style.get("top_texture", null)) == ground.top_texture
+		and as_texture(style.get("cliff_texture", null)) == ground.side_texture
+		and is_equal_approx(top_tile, ground.top_tile_size)
+		and is_equal_approx(cliff_tile, ground.side_tile_size))
+
+## True when the brush (Custom Ground Style) holds exactly `style`.
+static func _brush_holds(terrain: Node3D, style: Dictionary) -> bool:
+	var brush_top: Color = terrain.get_meta(Meta.BRUSH_TOP_COLOR, Meta.DEFAULT_TOP_COLOR)
+	var brush_cliff: Color = terrain.get_meta(Meta.BRUSH_CLIFF_COLOR, Meta.DEFAULT_CLIFF_COLOR)
+	var top_color: Color = style.get("top_color", Meta.DEFAULT_TOP_COLOR)
+	var cliff_color: Color = style.get("cliff_color", Meta.DEFAULT_CLIFF_COLOR)
+	return (brush_top.is_equal_approx(top_color) and brush_cliff.is_equal_approx(cliff_color)
+		and as_texture(Meta.get_optional(terrain, Meta.BRUSH_TOP_TEXTURE)) == as_texture(style.get("top_texture", null))
+		and as_texture(Meta.get_optional(terrain, Meta.BRUSH_CLIFF_TEXTURE)) == as_texture(style.get("cliff_texture", null)))
+
+## Keeps the palette styles linked to a biome ground style equal to it (the
+## brush too when it held one), and links the styles that equal one (scenes
+## painted before the link existed). Cheap: one pass over the palette.
+## Returns true when the palette changed (the meshes need a rebuild).
+static func sync_with_biome(terrain: Node3D) -> bool:
+	if not is_instance_valid(terrain) or not terrain.has_meta(Meta.STYLE_PALETTE):
+		return false
+	var biome := TerrainBiome.of(terrain)
+	var by_name := {}
+	for ground: GroundStyle in biome.ground_styles:
+		if ground != null and not by_name.has(String(ground.name)):
+			by_name[String(ground.name)] = ground
+	var palette: Array = terrain.get_meta(Meta.STYLE_PALETTE)
+	var changed := false
+	for i in palette.size():
+		if typeof(palette[i]) != TYPE_DICTIONARY:
+			continue
+		var style: Dictionary = palette[i]
+		var linked: String = style.get("biome_style", "")
+		if linked.is_empty():
+			linked = _biome_style_name(biome, style)
+			if linked.is_empty():
+				continue
+			style = style.duplicate()
+			style["biome_style"] = linked
+			palette[i] = style
+			changed = true
+		if not by_name.has(linked):
+			continue
+		var ground: GroundStyle = by_name[linked]
+		if _same_as(style, ground):
+			continue
+		if _brush_holds(terrain, style):
+			terrain.set_meta(Meta.BRUSH_TOP_COLOR, ground.top_color)
+			terrain.set_meta(Meta.BRUSH_CLIFF_COLOR, ground.side_color)
+			Meta.set_optional(terrain, Meta.BRUSH_TOP_TEXTURE, ground.top_texture)
+			Meta.set_optional(terrain, Meta.BRUSH_CLIFF_TEXTURE, ground.side_texture)
+			terrain.set_meta(Meta.BRUSH_TOP_TILE_SIZE, ground.top_tile_size)
+			terrain.set_meta(Meta.BRUSH_CLIFF_TILE_SIZE, ground.side_tile_size)
+		palette[i] = {
+			"top_color": ground.top_color,
+			"cliff_color": ground.side_color,
+			"top_texture": ground.top_texture,
+			"cliff_texture": ground.side_texture,
+			"top_tile_size": ground.top_tile_size,
+			"cliff_tile_size": ground.side_tile_size,
+			"signature": style_signature(ground.top_color, ground.side_color, ground.top_texture, ground.side_texture, ground.top_tile_size, ground.side_tile_size),
+			"biome_style": linked,
+		}
+		changed = true
+	if fill_texture_means(palette):
+		changed = true
+	if changed:
+		terrain.set_meta(Meta.STYLE_PALETTE, palette)
+	return changed
+
+## Stores the mean colour of each textured style face ("top_mean" /
+## "cliff_mean", read by MaterialFactory.terrain_style_color) in the palette
+## entries that lack it. Main thread (reads the texture images). Returns true
+## when an entry changed.
+static func fill_texture_means(palette: Array) -> bool:
+	var changed := false
+	for i in palette.size():
+		if typeof(palette[i]) != TYPE_DICTIONARY:
+			continue
+		var style: Dictionary = palette[i]
+		for side: String in ["top", "cliff"]:
+			var texture := as_texture(style.get(side + "_texture", null))
+			if texture == null or style.has(side + "_mean"):
+				continue
+			var mean: Variant = texture_mean_color(texture)
+			if mean == null:
+				continue
+			style = style.duplicate()
+			style[side + "_mean"] = mean
+			palette[i] = style
+			changed = true
+	return changed
+
+## Mean colour (sRGB) of a texture's pixels, cached per resource; null when
+## its image cannot be read.
+static func texture_mean_color(texture: Texture2D) -> Variant:
+	var key := resource_identity(texture)
+	if _mean_colors.has(key):
+		return _mean_colors[key]
+	var image := texture.get_image()
+	if image == null or image.is_empty():
+		return null
+	image = image.duplicate() as Image
+	if image.is_compressed() and image.decompress() != OK:
+		return null
+	image.clear_mipmaps()
+	image.convert(Image.FORMAT_RGBA8)
+	while image.get_width() > 8 or image.get_height() > 8:
+		image.shrink_x2()
+	var sum := Color(0, 0, 0, 0)
+	for y in image.get_height():
+		for x in image.get_width():
+			sum += image.get_pixel(x, y)
+	var mean := sum / float(image.get_width() * image.get_height())
+	mean.a = 1.0
+	_mean_colors[key] = mean
+	return mean
 
 ## Captures the Custom Ground Style (brush settings) as a palette style.
 static func capture_current_paint_style(terrain: Node3D) -> int:

@@ -679,15 +679,11 @@ static func apply(terrain: Node3D, chunk: Node3D, entries: Array, add_child: Cal
 ## get the wind material of their kind, rigid meshes (rocks, mounds, bones)
 ## the plain one; a custom mesh gets the plain one, or null to keep its own
 ## materials (a Model, or a Mesh with `use_mesh_materials`). The terrain's
-## Detail Material (Meta.DETAIL_MATERIAL) replaces all of them except those.
-## The terrain's custom detail Material (Meta.DETAIL_MATERIAL); null when
-## unset or when the slot holds anything else.
+## biome's Detail Material replaces all of them except those.
+## The biome's Detail Material; null when unset.
 static func custom_material(terrain: Node3D) -> Material:
-	var value: Variant = Meta.get_optional(terrain, Meta.DETAIL_MATERIAL)
-	if value is Material:
-		var material: Material = value
-		return material
-	return null
+	var biome := biome_of(terrain)
+	return biome.detail_material if biome != null else null
 
 static func layer_material(layer: DetailLayer, terrain: Node3D = null) -> Material:
 	if layer.keeps_own_materials():

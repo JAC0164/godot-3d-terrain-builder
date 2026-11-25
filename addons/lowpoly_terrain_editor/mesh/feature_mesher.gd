@@ -334,7 +334,7 @@ static func _add_split_group(terrain: Node3D, job: Dictionary, feature_type: Str
 	var is_road := feature_type == FeatureStyle.ROAD
 	var representative: Dictionary = FeatureStyle.migrate(group[0], feature_type)
 	var material: Material = MaterialFactory.road_material(terrain, representative) if is_road \
-		else MaterialFactory.river_material(representative, Meta.get_bool(terrain, Meta.RIVER_MOBILE_WATER, false))
+		else MaterialFactory.river_material(terrain, representative, Meta.get_bool(terrain, Meta.RIVER_MOBILE_WATER, false))
 	var chunks: Dictionary = job["chunks"]
 	var pieces: Dictionary = geometry["pieces"]
 	for index: int in pieces:
@@ -355,7 +355,7 @@ static func _add_packed_group(terrain: Node3D, array_mesh: ArrayMesh, collision_
 		feature_type: String, group: Array, geometry: Dictionary) -> void:
 	var is_road := feature_type == FeatureStyle.ROAD
 	var representative: Dictionary = FeatureStyle.migrate(group[0], feature_type)
-	var material: Material = MaterialFactory.road_material(terrain, representative) if is_road 		else MaterialFactory.river_material(representative, Meta.get_bool(terrain, Meta.RIVER_MOBILE_WATER, false))
+	var material: Material = MaterialFactory.road_material(terrain, representative) if is_road 		else MaterialFactory.river_material(terrain, representative, Meta.get_bool(terrain, Meta.RIVER_MOBILE_WATER, false))
 	var vertices: PackedVector3Array = geometry["vertices"]
 	var normals: PackedVector3Array = geometry["normals"]
 	var uvs: PackedVector2Array = geometry["uvs"]
@@ -371,7 +371,7 @@ static func _add_group(terrain: Node3D, array_mesh: ArrayMesh, collision_faces: 
 		feature_type: String, group: Array, geometry: Dictionary) -> void:
 	var is_road := feature_type == FeatureStyle.ROAD
 	var representative: Dictionary = FeatureStyle.migrate(group[0], feature_type)
-	var material: Material = MaterialFactory.road_material(terrain, representative) if is_road 		else MaterialFactory.river_material(representative, Meta.get_bool(terrain, Meta.RIVER_MOBILE_WATER, false))
+	var material: Material = MaterialFactory.road_material(terrain, representative) if is_road 		else MaterialFactory.river_material(terrain, representative, Meta.get_bool(terrain, Meta.RIVER_MOBILE_WATER, false))
 	var vertices: Array = geometry["vertices"]
 	var normals: Array = geometry["normals"]
 	var uvs: Array = geometry["uvs"]
@@ -464,7 +464,7 @@ static func build_preview(terrain: Node3D, carve: PackedFloat32Array, preview_fe
 	if preview_type == FeatureStyle.ROAD:
 		material = MaterialFactory.road_material(terrain, preview_feature)
 	else:
-		material = MaterialFactory.river_material(preview_feature, Meta.get_bool(terrain, Meta.RIVER_MOBILE_WATER, false))
+		material = MaterialFactory.river_material(terrain, preview_feature, Meta.get_bool(terrain, Meta.RIVER_MOBILE_WATER, false))
 	var vertices: Array = geometry["vertices"]
 	var normals: Array = geometry["normals"]
 	var uvs: Array = geometry["uvs"]

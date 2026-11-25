@@ -445,7 +445,6 @@ static func _add_track_network(g: Generation, rng: RandomNumberGenerator) -> int
 	var terrain := g.terrain
 	var n := g.n
 	terrain.set_meta(Meta.ROAD_WIDTH, float(recipe.track_width) * g.cell_size)
-	terrain.set_meta(Meta.ROAD_COLOR, recipe.track_color)
 	var step := MapPaths.step_for(n)
 	var side := MapPaths.side_for(n, step)
 	var count := side * side
@@ -792,7 +791,6 @@ static func _field(map_seed: int, salt: int, scale: float, n: int) -> PackedByte
 ## Winding tracks crossing the map (split where they leave the ground).
 static func _add_tracks(terrain: Node3D, recipe: MapRecipe, rng: RandomNumberGenerator, active: PackedByteArray, n: int, cell_size: float) -> int:
 	terrain.set_meta(Meta.ROAD_WIDTH, float(recipe.track_width) * cell_size)
-	terrain.set_meta(Meta.ROAD_COLOR, recipe.track_color)
 	var half := float(n) * 0.5
 	var committed := 0
 	for k in range(int(recipe.track_count)):
