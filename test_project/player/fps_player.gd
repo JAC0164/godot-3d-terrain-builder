@@ -106,17 +106,17 @@ func _physics_process(delta: float) -> void:
 			direction += Vector3.UP
 		if _key(KEY_C) or _key(KEY_CTRL) or touch_down:
 			direction += Vector3.DOWN
-		var target := direction.limit_length() * fly_speed * (2.5 if running else 1.0)
-		velocity = velocity.lerp(target, blend)
+		var fly_velocity := direction.limit_length() * fly_speed * (2.5 if running else 1.0)
+		velocity = velocity.lerp(fly_velocity, blend)
 		move_and_slide()
 		return
 
 	# The body only turns around Y: its basis gives the walking direction.
-	var target := global_basis * Vector3(input.x, 0.0, input.y) * (run_speed if running else walk_speed)
+	var walk_velocity := global_basis * Vector3(input.x, 0.0, input.y) * (run_speed if running else walk_speed)
 	if not is_on_floor():
 		blend *= 0.3
-	velocity.x = lerpf(velocity.x, target.x, blend)
-	velocity.z = lerpf(velocity.z, target.z, blend)
+	velocity.x = lerpf(velocity.x, walk_velocity.x, blend)
+	velocity.z = lerpf(velocity.z, walk_velocity.z, blend)
 	if is_on_floor():
 		if _key(KEY_SPACE) or touch_up:
 			velocity.y = jump_velocity
