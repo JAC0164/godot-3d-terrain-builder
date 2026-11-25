@@ -1,0 +1,8 @@
+# The Godot Asset Library installs the GitHub archive of a commit: keep only the
+# plugin (addons/) and the README in it. The site, the test project and the dev
+# tools stay in the repository but out of the download.
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/docs export-ignore
+/test_project export-ignore
+/tools export-ignore
