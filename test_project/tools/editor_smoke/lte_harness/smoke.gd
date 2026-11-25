@@ -112,14 +112,15 @@ func _run() -> void:
 	check("paint tool active", plugin._strokes.mode == 1)
 	var chunks := terrain.get_node_or_null("_GeneratedTerrainChunks")
 	check("new terrain: everything at runtime (chunks not saved)", chunks != null and chunks.owner == null and int(terrain.get_meta("_lte_runtime_build")) == 2)
-	# N4: a new terrain starts in the savanna biome, so its ground list and the
-	# proposed Map Preset agree.
+	# N4: a new terrain starts in the generic Temperate biome (the plugin is
+	# not tied to a theme), so its ground list and the proposed Map Preset agree.
 	var new_biome: Resource = terrain.get_meta("_lte_biome") if terrain.has_meta("_lte_biome") else null
-	check("new terrain: savanna biome", new_biome != null and new_biome.resource_path.ends_with("biomes/presets/senegal_savanna.tres"))
+	check("new terrain: Temperate biome", new_biome != null and new_biome.resource_path.ends_with("biomes/presets/temperate.tres"))
 	var new_ground: OptionButton = toolbar.get_ground_select()
-	check("new terrain: ground list starts with Dry Grass (%s)" % new_ground.get_item_text(0), new_ground.get_item_text(0) == "Dry Grass" and new_ground.get_item_text(new_ground.selected) == "Dry Grass")
+	check("new terrain: ground list starts with Grass (%s)" % new_ground.get_item_text(0), new_ground.get_item_text(0) == "Grass" and new_ground.get_item_text(new_ground.selected) == "Grass")
 	var new_recipe: Resource = plugin.default_map_recipe(terrain)
-	check("new terrain: Map Preset = Senegal Savanna", new_recipe != null and new_recipe.resource_path.ends_with("senegal_savanna_map.tres"))
+	check("new terrain: Map Preset = Temperate Island", new_recipe != null and new_recipe.resource_path.ends_with("temperate_island_map.tres"))
+	check("Map Preset list starts with Temperate Island", plugin.get_map_presets()[0].resource_path.ends_with("temperate_island_map.tres"))
 	# N5: rare layer settings in a closed "Advanced" group, after the others.
 	var layer_props: Array = []
 	var in_advanced := false
@@ -406,6 +407,8 @@ func _run() -> void:
 	var painted_count: int = detail_total.call(terrain)
 	check("Vegetation brush grows plants on bare ground (%d)" % painted_count, painted_count > 0)
 	# Painted acacia forest: crowns do not cross (DetailLayer.paint_spacing).
+	# Trees come from the Savanna example biome (the default Temperate has none).
+	terrain.set_meta("_lte_biome", load("res://addons/lowpoly_terrain_editor/biomes/presets/senegal_savanna.tres"))
 	var acacia_spots := func() -> Array[Vector2]:
 		var spots: Array[Vector2] = []
 		# From the scatter buffers (headless MultiMesh transforms read back as zero).

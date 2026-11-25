@@ -19,6 +19,7 @@ extends EditorPlugin
 ## are disposable and rebuilt from it.
 
 const Meta = preload("core/terrain_meta.gd")
+const NodeNames = preload("core/node_names.gd")
 const TerrainData = preload("core/terrain_data.gd")
 const TerrainSnapshot = preload("core/terrain_snapshot.gd")
 const ToolMode = preload("editing/tool_mode.gd")
@@ -48,8 +49,9 @@ const GroundBumps = preload("core/ground_bumps.gd")
 ## Delay after the last biome edit before the details are re-scattered.
 const BIOME_REBUILD_DELAY_MS := 250
 const NO_TERRAIN_STATUS := "No terrain selected"
-## Biome of a new terrain (relative to the plugin folder).
-const NEW_TERRAIN_BIOME := "biomes/presets/senegal_savanna.tres"
+## Biome of a new terrain (relative to the plugin folder): the generic
+## Temperate one. Inspector > Look > Biome picks another (e.g. the savanna).
+const NEW_TERRAIN_BIOME := "biomes/presets/temperate.tres"
 ## New terrains: small bumps (m) in the ground, so it is not a dead flat sheet
 ## (Inspector > Look > Ground Bumps). The ground's texture / style is the
 ## game's own Ground Material (Inspector > Look).
@@ -540,7 +542,8 @@ func _create_new_terrain() -> void:
 
 	var terrain := Node3D.new()
 	terrain.name = "LowpolyTerrain"
-	scene_root.add_child(terrain)
+	# LowpolyTerrain2, 3... when the scene already has one (core/node_names.gd).
+	NodeNames.add(scene_root, terrain)
 	terrain.owner = scene_root
 
 	TerrainData.initialize(terrain)
@@ -556,8 +559,8 @@ func _create_new_terrain() -> void:
 	terrain.set_meta(Meta.COLLISION_ENABLED, true)
 	# Small bumps in the ground (Inspector > Look > Ground Bumps).
 	GroundBumps.set_amount(terrain, NEW_TERRAIN_GROUND_BUMPS)
-	# New terrains start in the savanna biome, so the ground list and the
-	# proposed Map Preset agree from the start (Inspector > Look > Biome).
+	# New terrains start in the generic Temperate biome, so the ground list
+	# and the proposed Map Preset agree from the start (Inspector > Look > Biome).
 	var plugin_script: Script = get_script()
 	var biome_path: String = plugin_script.resource_path.get_base_dir().path_join(NEW_TERRAIN_BIOME)
 	if ResourceLoader.exists(biome_path):
@@ -1122,7 +1125,7 @@ func ensure_runtime_node(terrain: Node3D) -> Node:
 		return null
 	var runtime := TerrainRuntime.new()
 	runtime.name = Meta.RUNTIME_NODE_NAME
-	terrain.add_child(runtime)
+	NodeNames.add(terrain, runtime)
 	runtime.owner = scene_root
 	if needed:
 		# Technical note for the Output log only (the toolbar keeps its line

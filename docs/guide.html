@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
-  <link rel="stylesheet" href="assets/style.css?v=4">
+  <link rel="stylesheet" href="assets/style.css?v=5">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -78,8 +78,8 @@
           <img src="editor/toolbar_new.webp" width="328" height="53" alt="New Terrain button in the 3D editor menu bar">
           <figcaption>With no terrain selected, the menu bar shows only <strong>New Terrain</strong>.</figcaption>
         </figure>
-        <p>The new terrain uses the <strong>Senegal Savanna</strong> biome (<em>Inspector &gt; Look &gt; Biome</em> to
-          change it) and is empty: the 3D view says so until you drag in it to add ground (Ground is
+        <p>The new terrain uses the generic <strong>Temperate</strong> biome (grass, rock, sand, snow;
+          <em>Inspector &gt; Look &gt; Biome</em> to change it) and is empty: the 3D view says so until you drag in it to add ground (Ground is
           already active), or click <strong>Generate Map</strong> in the Inspector.</p>
         <ul>
           <li>Ground you paint stays bare: add grass, trees and props afterwards with the
@@ -161,9 +161,10 @@
         <h2>Biomes</h2>
         <p>The biome is the terrain's look: ground styles, baked shading (style blend, slope tint, ambient
           occlusion, colour variation, cliff darkening), waterhole colours and what grows. Two come with the
-          plugin: <code>biomes/presets/senegal_savanna.tres</code> (dry grass, laterite, acacias, baobabs,
-          termite mounds, skulls; used by new terrains) and <code>biomes/presets/temperate.tres</code> (green).
-          Pick one in <em>Look &gt; Biome</em>.</p>
+          plugin: <code>biomes/presets/temperate.tres</code> (green grass, rock, sand, snow; used by new
+          terrains) and <code>biomes/presets/senegal_savanna.tres</code> (dry grass, laterite, acacias, baobabs,
+          termite mounds, skulls), an example of a themed biome. Pick one in <em>Look &gt; Biome</em>, or make
+          your own.</p>
         <ul>
           <li><strong>Look &gt; Edit Biome</strong> (or <em>Advanced &gt; Shading &gt; Edit Ground Shading</em>) opens
             it; every change shows on the terrain at once.</li>
@@ -184,7 +185,7 @@
       <section id="vegetation">
         <h2>Vegetation</h2>
         <figure class="crop">
-          <img src="editor/viewport_vegetation.webp" width="1204" height="830" loading="lazy" alt="The Vegetation brush ring over the savanna, labelled Vegetation + (all plants) 4.0 m 100%">
+          <img src="editor/viewport_vegetation.webp" width="1204" height="830" loading="lazy" alt="The Vegetation brush ring over a generated map, labelled Vegetation + (all plants) 4.0 m 100%">
           <figcaption>The Vegetation ring says what it paints, its size and strength.</figcaption>
         </figure>
         <p>On a generated map, the biome's layers grow by themselves. On ground painted by hand nothing grows
@@ -199,11 +200,11 @@
             bare on ground painted by hand). Undo works.</li>
         </ul>
         <p>The list next to the tool picks what you paint: <strong>All plants</strong> (grass, shrubs, trees; rocks,
-          gravel, termite mounds and bones stay as they are) or one layer of the biome only (e.g. Acacias,
-          Rocks, Termite Mounds: pick them to add rocks, mounds or bones on bare ground).</p>
+          gravel and props stay as they are) or one layer of the biome only (e.g. Rocks, or a tree layer:
+          pick it to add only that on bare ground).</p>
         <ul>
-          <li>With a tree or prop layer picked, <strong>one click grows one</strong> where you click (a baobab, a
-            termite mound...; at a cliff edge, on the flat ground next to it). Drag to plant more.</li>
+          <li>With a tree or prop layer picked, <strong>one click grows one</strong> where you click (a tree, a
+            rock, a prop...; at a cliff edge, on the flat ground next to it). Drag to plant more.</li>
           <li>They are spaced so they do not overlap: a click right next to one of the same kind adds none,
             and a thick forest keeps its trees about one crown apart (per layer: <em>Advanced &gt; Paint
             Spacing</em>, in widths of the model, 0 = they may overlap).</li>
@@ -257,11 +258,12 @@
 
       <section id="generate">
         <h2>Generate Map</h2>
-        <p>In the terrain Inspector, <em>Map</em>: pick a <strong>Map Preset</strong> (Senegal Savanna, Temperate
-          Island), set a <strong>Map Seed</strong> and click <strong>Generate Map</strong>. Undo restores the previous
+        <p>In the terrain Inspector, <em>Map</em>: pick a <strong>Map Preset</strong> (Temperate Island, the default;
+          Senegal Savanna and Senegal Open World, examples of a themed map), set a <strong>Map Seed</strong>
+          and click <strong>Generate Map</strong>. Undo restores the previous
           terrain.</p>
         <ul>
-          <li>With no preset picked, Generate Map uses the preset of the terrain's biome, else the first one.</li>
+          <li>With no preset picked, Generate Map uses the preset of the terrain's biome, else Temperate Island.</li>
           <li><strong>Custom Recipe...</strong> at the end of the list takes your own recipe file. Duplicate a
             recipe to tune it: plateaus, lowlands, ground patches, border hills or cliffs, rivers, tracks,
             waterholes.</li>
@@ -316,7 +318,7 @@
         <h2>In game</h2>
         <p>The terrain gets a <code>_LowpolyTerrainRuntime</code> child. Keep it: it unpacks the terrain data
           stored compressed in the scene, rebuilds what the scene does not store (spread over frames), streams
-          big maps around the player, and gives trees, baobabs and termite mounds a collision (detail layers
+          big maps around the player, and gives trees and props a collision (detail layers
           with a Collision Radius).</p>
 <pre><code>@onready var runtime := $LowpolyTerrain/_LowpolyTerrainRuntime
 
@@ -336,7 +338,7 @@ func new_level() -&gt; void:
             collision are rebuilt when the scene opens), <em>Details at runtime</em>, or <em>Save everything</em>
             (biggest scene, fastest loading).</li>
           <li>With Save everything, most of the size is the saved meshes, details and collision: about 19 MB
-            of text for a 193 savanna map, against 160 KB with All at runtime.</li>
+            of text for a 193 m map, against 160 KB with All at runtime.</li>
           <li>Tip: save big maps as <code>.scn</code> (binary) instead of <code>.tscn</code>: about 5x smaller and 10x
             faster to open.</li>
         </ul>
@@ -357,9 +359,9 @@ func new_level() -&gt; void:
 
       <section id="lighting">
         <h2>Lighting and phones</h2>
-        <p>The plugin does not set up the sky, fog or sun: each game lights its scenes its own way. For the
-          savanna look, drop <code>test_project/world/savanna_sky.tscn</code> (WorldEnvironment + warm sun 24
-          degrees high, so the ground facets stand out) in your scene, or use
+        <p>The plugin does not set up the sky, fog or sun: each game lights its scenes its own way. The test
+          project has an example: <code>test_project/world/savanna_sky.tscn</code> (WorldEnvironment + warm sun
+          24 degrees high, so the ground facets stand out), or
           <code>test_project/world/savanna_environment.tres</code> on your own WorldEnvironment.</p>
         <ul>
           <li>On phones, sun shadows cost the most: give your sun 2 shadow splits and a 50 m Max Distance,
@@ -367,7 +369,7 @@ func new_level() -&gt; void:
             close by).</li>
           <li>For low-end phones, untick <em>Game &gt; Ground Casts Shadows</em>: hills no longer cast shadows on the
             plain (trees, rocks and props keep theirs), about 20% fewer triangles drawn and roughly 10% less
-            GPU time on the savanna map.</li>
+            GPU time on a 192 m generated map.</li>
           <li>Phones always get river water without screen-copy refraction.</li>
           <li>Roads and rivers cast no shadow (they lie flat on the ground).</li>
         </ul>
@@ -382,8 +384,9 @@ func new_level() -&gt; void:
 
       <section id="props">
         <h2>Built-in props</h2>
-        <p>The built-in props (acacia, baobab, termite mound, zebu skull, dead tree, shrub, rocks, grass) are
-          modelled in Blender. <code>tools/blender/lte_props.py</code> rebuilds them from code (paste it in
+        <p>The built-in props (grass tufts, rocks, pebbles, shrub, dead tree, and the savanna example's
+          acacia, baobab, termite mound and zebu skull) are modelled in Blender. Any biome layer can use your
+          own model instead. <code>tools/blender/lte_props.py</code> rebuilds them from code (paste it in
           Blender's Scripting tab, then <code>build_all()</code> and <code>export_glb(...)</code>), and
           <code>tools/blender/glb_to_gdscript.py</code> turns the GLB into
           <code>addons/lowpoly_terrain_editor/mesh/detail_mesh_data.gd</code>.</p>
@@ -411,6 +414,6 @@ func new_level() -&gt; void:
       </div>
     </div>
   </footer>
-  <script src="assets/site.js?v=4" defer></script>
+  <script src="assets/site.js?v=5" defer></script>
 </body>
 </html>

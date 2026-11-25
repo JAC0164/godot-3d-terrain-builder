@@ -7,7 +7,8 @@ extends Resource
 ## in the editor (Inspector > Map Generator) or in the game
 ## (LowpolyTerrainRuntime / MapGenerator.generate()).
 ##
-## Style fields are names of the biome's ground styles (e.g. "Laterite").
+## Style fields are names of the biome's ground styles (e.g. "Rock"); the
+## defaults suit the built-in Temperate biome.
 ## Duplicate a preset and tweak it per game.
 
 const MapPatch = preload("map_patch.gd")
@@ -41,17 +42,17 @@ const MapPatch = preload("map_patch.gd")
 @export_range(0.0, 32.0, 0.1) var border_height := 8.0
 ## How irregular the border's inner edge is.
 @export_range(0.0, 1.0, 0.01) var border_noise := 0.5
-@export var border_style := "Laterite"
+@export var border_style := "Rock"
 
 @export_group("Ground")
-@export var base_style := "Dry Grass"
+@export var base_style := "Grass"
 ## Height of the gentle rolling relief over the whole map.
 @export_range(0.0, 4.0, 0.05) var relief := 0.35
 ## Size of the relief undulations, in cells.
 @export_range(8.0, 512.0, 1.0) var relief_scale := 70.0
 
 @export_group("Plateaus")
-@export var plateau_style := "Laterite"
+@export var plateau_style := "Rock"
 ## Share (0..1) of the map raised as plateaus.
 @export_range(0.0, 0.9, 0.01) var plateau_coverage := 0.16
 @export_range(0.0, 16.0, 0.1) var plateau_height := 2.5
@@ -61,7 +62,7 @@ const MapPatch = preload("map_patch.gd")
 @export_range(0.0, 32.0, 0.5) var plateau_smoothness := 3.0
 
 @export_group("Lowlands")
-@export var lowland_style := "Green Savanna"
+@export var lowland_style := "Sand"
 @export_range(0.0, 0.9, 0.01) var lowland_coverage := 0.1
 @export_range(0.0, 8.0, 0.05) var lowland_depth := 0.8
 @export_range(4.0, 512.0, 1.0) var lowland_scale := 35.0
@@ -84,7 +85,7 @@ const MapPatch = preload("map_patch.gd")
 ## Tracks from edge to edge (with Track Network: the map exits).
 @export_range(0, 16) var track_count := 1
 @export_range(0.25, 16.0, 0.05) var track_width := 2.6
-@export var track_color := Color(0.66, 0.4, 0.26)
+@export var track_color := Color(0.55, 0.45, 0.32)
 ## How much the tracks wind (0 = straight).
 @export_range(0.0, 1.0, 0.01) var track_meander := 0.5
 ## Tracks join the map exits and the waterholes, along the easy ground
@@ -96,7 +97,7 @@ const MapPatch = preload("map_patch.gd")
 
 @export_group("Dried Waterholes")
 ## Waterholes per 100 x 100 cells (placed on flat open ground only).
-@export_range(0.0, 20.0, 0.05) var waterholes_per_10k_cells := 1.0
+@export_range(0.0, 20.0, 0.05) var waterholes_per_10k_cells := 0.0
 ## Radius range, in cells.
 @export_range(1.0, 64.0, 0.25) var waterhole_radius_min := 4.0
 @export_range(1.0, 64.0, 0.25) var waterhole_radius_max := 9.0
@@ -114,6 +115,7 @@ static func make_senegal_savanna(savanna_biome: Resource) -> Resource:
 	recipe.biome = savanna_biome
 	recipe.size = 192
 	recipe.island = 0.0
+	recipe.border_style = "Laterite"
 	recipe.base_style = "Dry Grass"
 	recipe.relief = 0.45
 	recipe.relief_scale = 60.0

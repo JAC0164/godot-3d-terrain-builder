@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lowpoly Terrain Editor for Godot 4</title>
-  <meta name="description" content="Godot 4 editor plugin to paint low poly 3D terrain by hand, or generate it from a seed or a small pixel image: ground styles, relief, roads, rivers, waterholes, vegetation, biomes, streamed maps, phone-friendly.">
+  <meta name="description" content="Godot 4 editor plugin to paint low poly 3D terrain by hand, or generate it from a seed or a small pixel image: ground styles, relief, roads, rivers, waterholes, vegetation, your own biomes, streamed maps, phone-friendly.">
   <meta property="og:title" content="Lowpoly Terrain Editor for Godot 4">
   <meta property="og:description" content="Paint low poly 3D terrain, generate it from a seed or a pixel map, play it.">
   <meta property="og:image" content="https://jac0164.github.io/godot-3d-terrain-builder/img/hero.webp">
@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
-  <link rel="stylesheet" href="assets/style.css?v=4">
+  <link rel="stylesheet" href="assets/style.css?v=5">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -34,8 +34,9 @@
     <section class="hero wrap">
       <h1>Low poly terrain for Godot&nbsp;4, painted or generated</h1>
       <p class="lead">An editor plugin that builds faceted 3D landscapes: ground styles, relief, roads,
-        rivers, dried waterholes, grass, trees and props. Paint them in the 3D view, make a whole map from
-        a seed, or draw one as a small pixel image.</p>
+        rivers, waterholes, grass, trees and props. Paint them in the 3D view, make a whole map from a
+        seed, or draw one as a small pixel image. The look is yours: colours, textures, plants and models
+        live in a biome you can change.</p>
       <div class="actions">
         <a class="btn primary" href="guide.html#install">Install the plugin</a>
         <a class="btn" href="editor.html">See it in the editor</a>
@@ -44,7 +45,7 @@
     </section>
 
     <div class="vista">
-      <img src="img/hero.webp" width="1920" height="1055" alt="A savanna map made with Generate Map: a river winding between laterite hills, tracks, acacias and baobabs, flat-topped mesas on the horizon">
+      <img src="img/hero.webp" width="1920" height="1055" alt="A green map made with Generate Map and the default Temperate biome: a river winding between grey rocky plateaus, two dirt tracks, sandy patches">
       <svg class="ridge" viewBox="0 0 1440 84" preserveAspectRatio="none" aria-hidden="true">
         <path class="f1" d="M0 84V52l90-22 80 18 90-34 80 26 90-14 90 32 90-36 90 22 90-36 90 28 80-12 90 26 90-32 90 24 90-14 120 18v38z"/>
         <path class="f2" d="M260 14l80 26-40 44zM790 8l90 28-40 48zM1140 18l90 24-50 42zM610 22l90 22-50 40zM90 30l80 18-50 36z"/>
@@ -59,14 +60,14 @@
         </div>
         <div class="ways">
           <article class="way">
-            <img src="editor/viewport_relief.webp" width="1204" height="830" loading="lazy" alt="The Relief tool's brush ring over a savanna map in the Godot 3D view">
+            <img src="editor/viewport_relief.webp" width="1204" height="830" loading="lazy" alt="The Relief tool's brush ring over a generated map in the Godot 3D view">
             <h3>Paint it</h3>
             <p>Seven tools in the 3D editor menu bar: Ground, Relief, Flatten, Road, River, Waterhole and
               Vegetation. Drag to apply, <kbd>Ctrl</kbd>+drag to do the opposite.</p>
             <a class="where" href="guide.html#tools">Tools and keys</a>
           </article>
           <article class="way">
-            <img src="img/track.webp" width="1280" height="703" loading="lazy" alt="A dirt track crossing dry grass between acacias, from a generated map">
+            <img src="img/track.webp" width="1280" height="703" loading="lazy" alt="A dirt track along a river through green grass, from a generated map">
             <h3>Generate it from a seed</h3>
             <p>Pick a map recipe, set a seed, click <strong>Generate Map</strong>: plateaus, lowlands,
               rivers, tracks, waterholes and plants. The same seed always gives the same map.</p>
@@ -74,7 +75,7 @@
           </article>
           <article class="way">
             <div class="inset">
-              <img src="img/pixel_map_terrain.webp" width="1280" height="703" loading="lazy" alt="Terrain built from a pixel map: laterite hills on a ring of dry grass around a lowered centre">
+              <img src="img/pixel_map_terrain.webp" width="1280" height="703" loading="lazy" alt="Terrain built from a pixel map: rocky hills on a ring of grass around a lowered sandy centre">
               <img class="inset-map" src="img/pixel_map_source.webp" width="384" height="384" loading="lazy" alt="The 96 by 96 pixel map it was built from: a green ring of ground with red raised patches, blue lowered centre and corners">
             </div>
             <h3>Draw it as a pixel map</h3>
@@ -97,7 +98,7 @@
         <figure class="shot">
           <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i></div>
           <div class="shot-body">
-            <img src="editor/editor.webp" width="1920" height="1080" loading="lazy" alt="The Godot editor with a generated savanna terrain: the plugin's toolbar in the 3D menu bar, the Ground brush ring in the 3D view and the LowPoly Terrain panel in the Inspector">
+            <img src="editor/editor.webp" width="1920" height="1080" loading="lazy" alt="The Godot editor with a generated terrain: the plugin's toolbar in the 3D menu bar, the Ground brush ring in the 3D view and the LowPoly Terrain panel in the Inspector">
           </div>
         </figure>
         <div class="actions">
@@ -110,16 +111,16 @@
       <div class="wrap">
         <div class="band-head">
           <h2 id="map-title">One generated map, up close</h2>
-          <p>All of these come from the same click on <strong>Generate Map</strong> (Senegal Savanna preset,
-            seed 7, one river added), untouched. The light is the test project's: the plugin builds the
+          <p>All of these come from the same click on <strong>Generate Map</strong> (the default Temperate
+            Island preset as a full map, seed 7, with a river and waterholes added), untouched. The light is the test project's: the plugin builds the
             terrain, your game lights it.</p>
         </div>
         <div class="mosaic">
-          <figure class="big"><img src="img/river.webp" width="1280" height="703" loading="lazy" alt="A river running between grass banks and laterite rocks"><figcaption><strong>Rivers</strong> carve their bed and never flow uphill.</figcaption></figure>
-          <figure><img src="img/waterhole.webp" width="1280" height="703" loading="lazy" alt="A dried waterhole with cracked mud"><figcaption><strong>Dried waterholes</strong> with cracked mud.</figcaption></figure>
-          <figure><img src="img/acacias.webp" width="1280" height="703" loading="lazy" alt="Acacias over dry grass"><figcaption><strong>Plants</strong> grow by biome rules and sway in the wind.</figcaption></figure>
-          <figure><img src="img/baobab.webp" width="1280" height="703" loading="lazy" alt="A baobab beside acacias"><figcaption><strong>Built-in props</strong>, or your own models.</figcaption></figure>
-          <figure class="wide"><img src="img/hero.webp" width="1920" height="1055" loading="lazy" alt="The whole savanna map from above the river"><figcaption><strong>The whole map</strong>, 192 m across; bigger maps stream around the player.</figcaption></figure>
+          <figure class="big"><img src="img/river.webp" width="1280" height="703" loading="lazy" alt="A river running beside a dirt track between green banks and rocky plateaus"><figcaption><strong>Rivers</strong> carve their bed and never flow uphill.</figcaption></figure>
+          <figure><img src="img/waterhole.webp" width="1280" height="703" loading="lazy" alt="A dried waterhole with cracked mud in a green plain"><figcaption><strong>Waterholes</strong> with cracked mud.</figcaption></figure>
+          <figure><img src="img/details.webp" width="1280" height="703" loading="lazy" alt="Grass tufts and rocks at the foot of a rocky plateau"><figcaption><strong>Grass and rocks</strong> grow by biome rules and sway in the wind.</figcaption></figure>
+          <figure><img src="img/track.webp" width="1280" height="703" loading="lazy" alt="A dirt track following a river"><figcaption><strong>Tracks</strong> follow the ground.</figcaption></figure>
+          <figure class="wide"><img src="img/hero.webp" width="1920" height="1055" loading="lazy" alt="The whole generated map from above the river"><figcaption><strong>The whole map</strong>, 192 m across; bigger maps stream around the player.</figcaption></figure>
         </div>
       </div>
     </section>
@@ -129,11 +130,12 @@
         <div class="band-head">
           <h2 id="biomes-title">A biome is one file</h2>
           <p>Ground styles, baked shading, waterhole colours and what grows where, on which ground and slope.
-            Savanna and Temperate come with the plugin; the others below are made with the biome API, each on
-            its own generated map.</p>
+            Temperate is the default; a Savanna biome comes as an example; the others below are made with
+            the biome API. Use your own models and textures for any look.</p>
         </div>
         <div class="biomes">
-          <figure><img src="img/tempere.webp" width="1280" height="703" loading="lazy" alt="Temperate biome: green grass and hills"><figcaption><strong>Temperate</strong>built in</figcaption></figure>
+          <figure><img src="img/tempere.webp" width="1280" height="703" loading="lazy" alt="Temperate biome: green grass and rocky hills"><figcaption><strong>Temperate</strong>the default</figcaption></figure>
+          <figure><img src="img/savanna.webp" width="1280" height="703" loading="lazy" alt="Savanna biome: dry grass, red hills, acacias and baobabs"><figcaption><strong>Savanna</strong>example preset</figcaption></figure>
           <figure><img src="img/desert.webp" width="1280" height="703" loading="lazy" alt="Desert biome: sand and sandstone mesas"><figcaption><strong>Desert</strong>sand, mesas, oasis</figcaption></figure>
           <figure><img src="img/neige.webp" width="1280" height="703" loading="lazy" alt="Snow biome: snowfield, rock and frozen lakes"><figcaption><strong>Snow</strong>rock, frozen lakes</figcaption></figure>
           <figure><img src="img/tropical.webp" width="1280" height="703" loading="lazy" alt="Tropical biome: lush grass and jungle hills"><figcaption><strong>Tropical</strong>jungle hills, swamp</figcaption></figure>

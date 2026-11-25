@@ -20,6 +20,9 @@ core/
   terrain_storage.gd      heights / mask / styles packed in one Zstandard
                           block while a scene is saved, unpacked on load
                           (plain arrays in memory)
+  node_names.gd           every node added to a scene goes through add():
+                          its name, or Name2, Name3... when taken (never
+                          Godot's @Node3D@123)
 biomes/                   user-facing Resources (the only class_name scripts)
   terrain_biome.gd        LowpolyTerrainBiome: ground styles, baked shading,
                           waterhole colors, detail layers; built-in

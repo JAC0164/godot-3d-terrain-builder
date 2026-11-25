@@ -262,7 +262,7 @@ kbd {
 
 /* Biomes: one strip, scrolls sideways on small screens. */
 .biomes {
-  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px;
 }
 .biomes figure { margin: 0; }
 .biomes img { aspect-ratio: 3 / 4; object-fit: cover; width: 100%; border-radius: var(--radius); }

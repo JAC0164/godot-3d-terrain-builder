@@ -1,10 +1,10 @@
 # Lowpoly Terrain Editor
 
 Godot 4 editor plugin to paint low poly 3D terrain by hand, or generate it from a seed or a
-small pixel image: ground styles, relief, roads, rivers, dried waterholes, plants, biomes,
+small pixel image: ground styles, relief, roads, rivers, waterholes, plants, your own biomes,
 streamed maps, phone-friendly.
 
-![A savanna map made with Generate Map](docs/img/hero.webp)
+![A map made with Generate Map](docs/img/hero.webp)
 
 **Documentation: https://jac0164.github.io/godot-3d-terrain-builder/**
 ([guide](https://jac0164.github.io/godot-3d-terrain-builder/guide.html),

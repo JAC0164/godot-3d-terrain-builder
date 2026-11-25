@@ -6,7 +6,12 @@ extends RefCounted
 
 const MapRecipe = preload("map_recipe.gd")
 
-## Map Recipes found in `directory` (*.tres), sorted by file name.
+## Listed first, and the recipe of a terrain whose biome has no preset: the
+## generic one (the plugin is not tied to a theme).
+const DEFAULT_FILE := "temperate_island_map.tres"
+
+## Map Recipes found in `directory` (*.tres): DEFAULT_FILE first, then the
+## others by file name.
 static func list(directory: String) -> Array[Resource]:
 	var out: Array[Resource] = []
 	var files := DirAccess.get_files_at(directory)
@@ -18,11 +23,14 @@ static func list(directory: String) -> Array[Resource]:
 			continue
 		var recipe := load(directory.path_join(file)) as Resource
 		if recipe != null and recipe.get_script() == MapRecipe:
-			out.append(recipe)
+			if file == DEFAULT_FILE:
+				out.push_front(recipe)
+			else:
+				out.append(recipe)
 	return out
 
-## Preset whose biome is the terrain's biome, else the first preset; null
-## when there is no preset at all.
+## Preset whose biome is the terrain's biome, else the first preset (the
+## generic DEFAULT_FILE); null when there is no preset at all.
 static func default_for(terrain: Node3D, presets: Array[Resource], biome_key: String) -> Resource:
 	if presets.is_empty():
 		return null

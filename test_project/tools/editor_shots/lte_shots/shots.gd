@@ -2,8 +2,8 @@
 extends EditorPlugin
 ## Screenshots of the plugin's editor UI for the documentation site
 ## (docs/editor/). Runs inside the real Godot editor of a scratch project
-## (tools/editor_shots/run_editor_shots.sh): makes a savanna map with Generate
-## Map, then saves the whole editor window and crops of the toolbar, the
+## (tools/editor_shots/run_editor_shots.sh): makes a map with Generate Map
+## (the default Temperate Island preset), then saves the whole editor window and crops of the toolbar, the
 ## Inspector sections, the brush ring and the biome. The editor window is kept
 ## off screen; images come from the editor's own viewport, never the desktop.
 
@@ -160,10 +160,11 @@ func _run() -> void:
 	EditorInterface.get_editor_settings().set_setting("editors/3d/manipulator_gizmo_opacity", 0.0)
 	await _frames(10)
 
-	# A level with the test project's savanna light.
+	# A level with the test project's sky and light.
 	var root := Node3D.new()
 	root.name = "Level"
 	var sky := (load("res://world/savanna_sky.tscn") as PackedScene).instantiate()
+	sky.name = "Sky"
 	root.add_child(sky)
 	sky.owner = root
 	var packed := PackedScene.new()
@@ -200,8 +201,8 @@ func _run() -> void:
 	await _shot("editor_new_terrain")
 	_no_ring()
 
-	# 3. Generate Map (the Senegal Savanna preset, seed 7).
-	terrain.set_meta("_lte_map_recipe", load(ADDON + "generation/presets/senegal_savanna_map.tres"))
+	# 3. Generate Map (the default Temperate Island preset, seed 7).
+	terrain.set_meta("_lte_map_recipe", load(ADDON + "generation/presets/temperate_island_map.tres"))
 	terrain.set_meta("_lte_map_seed", 7)
 	EditorInterface.inspect_object(terrain)
 	await _frames(6)
@@ -224,7 +225,7 @@ func _run() -> void:
 	_plugin._set_tool(1)
 	await _frames(6)
 	await _open_section("Map")
-	await _frame_around(terrain, 62.0)
+	await _frame_around(terrain, 44.0)
 	_toolbar._brush_radius_spin.value = 8.0
 	_ring(1, Vector2(0.4, 0.62))
 	await _shot("editor")

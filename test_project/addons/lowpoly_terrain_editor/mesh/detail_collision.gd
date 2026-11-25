@@ -13,6 +13,7 @@ extends RefCounted
 ## Built in game by LowpolyTerrainRuntime; the editor does not need it.
 
 const Meta = preload("../core/terrain_meta.gd")
+const NodeNames = preload("../core/node_names.gd")
 const DetailScatter = preload("detail_scatter.gd")
 const DetailLayer = preload("../biomes/detail_layer.gd")
 
@@ -135,7 +136,7 @@ static func finish_chunk(job: Dictionary) -> int:
 	clear_chunk(chunk)
 	if body != null:
 		if shapes > 0:
-			chunk.add_child(body)
+			NodeNames.add(chunk, body)
 		else:
 			body.free()
 			shapes = 0

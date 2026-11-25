@@ -42,6 +42,7 @@ extends Node
 ## it through the editor_* calls (TerrainBuilder routes them).
 
 const Meta = preload("../core/terrain_meta.gd")
+const NodeNames = preload("../core/node_names.gd")
 const TerrainData = preload("../core/terrain_data.gd")
 const StylePalette = preload("../styles/style_palette.gd")
 const TerrainBuilder = preload("../mesh/terrain_builder.gd")
@@ -994,7 +995,7 @@ func _attach_roads(c: Vector2i) -> void:
 	roads.mesh = mesh
 	# Flat on the ground: their shadow would cost a pass for nothing.
 	roads.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	chunk.add_child(roads)
+	NodeNames.add(chunk, roads)
 
 ## Runs `work` (a Callable(terrain) -> arrays) for `key` on a worker thread,
 ## on a snapshot of the terrain; without threads, at once on the terrain.
@@ -1102,13 +1103,13 @@ func _finish_far_block(block: Vector2i, result: Dictionary) -> void:
 	if container == null:
 		container = Node3D.new()
 		container.name = FAR_GROUND_NAME
-		_terrain.add_child(container)
+		NodeNames.add(_terrain, container)
 	var node: MeshInstance3D = _far_blocks.get(block)
 	if node == null:
 		node = MeshInstance3D.new()
 		node.name = "Far_%d_%d" % [block.x, block.y]
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		container.add_child(node)
+		NodeNames.add(container, node)
 		_far_blocks[block] = node
 	var arrays: Array = result["arrays"]
 	node.mesh = LodMesher.assemble(_terrain, arrays)
@@ -1193,7 +1194,7 @@ func _add_chunk_shape(c: Vector2i) -> void:
 	body.collision_layer = 1 << (layer_number - 1)
 	body.collision_mask = 0
 	body.shape_owner_add_shape(body.create_shape_owner(body), shape)
-	chunk.add_child(body)
+	NodeNames.add(chunk, body)
 	_ground_shapes[c] = body
 
 func _remove_chunk_shape(c: Vector2i) -> void:
@@ -1323,7 +1324,7 @@ func _reset_ground_collision() -> void:
 	var layer_number := clampi(Meta.get_int(_terrain, Meta.COLLISION_LAYER, 1), 1, 32)
 	body.collision_layer = 1 << (layer_number - 1)
 	body.collision_mask = 0
-	_terrain.add_child(body)
+	NodeNames.add(_terrain, body)
 
 func _chunk_faces(chunk_x: int, chunk_z: int) -> PackedVector3Array:
 	var chunk := TerrainMesher.find_chunk(_terrain, chunk_x, chunk_z)
@@ -1389,7 +1390,7 @@ static func _ensure_feature_node(t: Node3D) -> void:
 	if t.get_node_or_null(Meta.GENERATED_MESH_NAME) == null:
 		var mesh_instance := MeshInstance3D.new()
 		mesh_instance.name = Meta.GENERATED_MESH_NAME
-		t.add_child(mesh_instance)
+		NodeNames.add(t, mesh_instance)
 
 ## Editor: rebuild what the scene file did not store (runtime build modes),
 ## without collision and without generating a new map.

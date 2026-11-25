@@ -18,6 +18,7 @@ extends RefCounted
 ## hand it the work (editor_stream), only its detailed chunks are rebuilt.
 
 const Meta = preload("../core/terrain_meta.gd")
+const NodeNames = preload("../core/node_names.gd")
 const StylePalette = preload("../styles/style_palette.gd")
 const TerrainMesher = preload("terrain_mesher.gd")
 const MeshUtils = preload("mesh_utils.gd")
@@ -65,7 +66,7 @@ func _scene_owner() -> Node:
 ## Adds a generated node, saved with the scene unless the terrain rebuilds
 ## that kind of node at runtime (Meta.RUNTIME_BUILD).
 func _add_generated_child(terrain: Node3D, parent: Node, child: Node, is_detail: bool = false) -> void:
-	parent.add_child(child)
+	NodeNames.add(parent, child)
 	var scene_root := _scene_owner()
 	if scene_root and _saved(terrain, is_detail) and editor_stream(terrain) == null:
 		child.owner = scene_root
@@ -386,7 +387,7 @@ static func _update_ground_caster(terrain: Node3D, chunk: MeshInstance3D, caster
 	if caster == null:
 		caster = MeshInstance3D.new()
 		caster.name = Meta.GROUND_SHADOW_NAME
-		chunk.add_child(caster)
+		NodeNames.add(chunk, caster)
 		if chunk.owner != null:
 			caster.owner = chunk.owner
 	if not caster_arrays.is_empty():
@@ -781,7 +782,7 @@ func show_preview(terrain: Node3D, preview_feature: Dictionary) -> void:
 		preview = MeshInstance3D.new()
 		preview.name = Meta.GENERATED_PREVIEW_MESH_NAME
 		preview.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		terrain.add_child(preview)
+		NodeNames.add(terrain, preview)
 	preview.mesh = FeatureMesher.build_preview(terrain, get_river_carve(terrain), preview_feature)
 
 ## Also removes the empty preview node that older versions left (and saved).

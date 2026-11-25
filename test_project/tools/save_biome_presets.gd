@@ -26,7 +26,7 @@ func _initialize() -> void:
 	var recipes := {
 		"senegal_savanna_map.tres": MapRecipe.make_senegal_savanna(savanna),
 		"temperate_island_map.tres": MapRecipe.make_temperate_island(temperate),
-		# Sorted after senegal_savanna_map: the default recipe stays the small map.
+		# MapPresets lists temperate_island_map first: the generic default.
 		"senegal_savanna_open_world_map.tres": MapRecipe.make_senegal_open_world(savanna),
 	}
 	for file in recipes:

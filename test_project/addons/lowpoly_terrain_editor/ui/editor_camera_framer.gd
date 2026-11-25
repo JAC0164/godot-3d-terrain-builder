@@ -11,6 +11,8 @@ extends RefCounted
 ## The view angle is kept. The previous selection is restored in the same
 ## frame. When the editor layout differs (other Godot version) it does nothing.
 
+const NodeNames = preload("../core/node_names.gd")
+
 ## Godot's mouse-wheel zoom factor (Node3DEditorViewport, ZOOM_FREELOOK_MULTIPLIER).
 const ZOOM_STEP := 1.08
 const MAX_ZOOM_STEPS := 120
@@ -71,7 +73,7 @@ static func frame(host: Node, aabb: AABB) -> bool:
 	var previous: Array[Node] = selection.get_selected_nodes()
 	var marker := Node3D.new()
 	marker.name = "_LteFrameMarker"
-	host.add_child(marker)
+	NodeNames.add(host, marker)
 	marker.global_position = center
 	selection.clear()
 	selection.add_node(marker)
