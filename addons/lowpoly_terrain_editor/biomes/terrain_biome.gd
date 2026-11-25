@@ -72,6 +72,12 @@ static var _default: LowpolyTerrainBiome = null
 	set(value):
 		variation = value
 		emit_changed()
+## Large lighter / darker patches (tens of meters across), lighter ones a bit
+## warmer, so bare ground does not read as one flat color.
+@export_range(0.0, 0.5, 0.005) var macro_variation := Meta.DEFAULT_SHADE_MACRO:
+	set(value):
+		macro_variation = value
+		emit_changed()
 @export_range(0.0, 1.0, 0.01) var cliff_darken := Meta.DEFAULT_SHADE_CLIFF_DARKEN:
 	set(value):
 		cliff_darken = value

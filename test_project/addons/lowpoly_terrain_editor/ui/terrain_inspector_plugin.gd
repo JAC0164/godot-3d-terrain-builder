@@ -335,7 +335,7 @@ func _build_size_section(parent: VBoxContainer, terrain: Node3D) -> void:
 
 func _build_shading_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(parent, "Shading", false,
-		"How the ground is lit. Its baked shading (style blend, slope tint, ambient occlusion, color variation, cliff darkening) is part of the biome.")
+		"How the ground is lit. Its baked shading (style blend, slope tint, ambient occlusion, color variation, large-scale variation, cliff darkening) is part of the biome.")
 	var biome_object: Object = Meta.get_optional(terrain, Meta.BIOME)
 	var biome := biome_object as Resource
 	if biome == null:

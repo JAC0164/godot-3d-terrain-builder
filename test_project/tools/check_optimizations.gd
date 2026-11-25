@@ -59,7 +59,7 @@ func _initialize() -> void:
 	for shade_key in TerrainData.SHADE_DEFAULTS:
 		terrain.set_meta(shade_key, 0)
 	var flat_biome: Resource = TerrainBiome.default_biome().duplicate(true)
-	for property in ["blend", "blend_noise", "slope_tint", "ambient_occlusion", "variation", "cliff_darken", "cliff_lip"]:
+	for property in ["blend", "blend_noise", "slope_tint", "ambient_occlusion", "variation", "macro_variation", "cliff_darken", "cliff_lip"]:
 		flat_biome.set(property, 0)
 	terrain.set_meta(Meta.BIOME, flat_biome)
 

@@ -13,6 +13,8 @@ extends RefCounted
 ## - Ambient occlusion: concave vertices (valleys, cliff feet) are darkened,
 ##   convex ones (ridges, cliff tops) slightly brightened.
 ## - Variation: a small per-face brightness / warmth jitter.
+## - Macro variation: large lighter (warmer) / darker (cooler) patches from a
+##   world-space noise, so bare ground is not one flat colour from afar.
 ## - Cliffs: darker toward the bottom, with an optional band of top colour
 ##   (a grass lip) along the top edge.
 ##
@@ -35,8 +37,11 @@ const AO_DARKEN := 0.45
 const AO_BRIGHTEN := 0.12
 ## Lip colour is slightly darker than the top so the edge reads as an overhang.
 const LIP_SHADE := 0.92
+## Size in meters of the macro variation patches (noise period).
+const MACRO_SIZE := 20.0
 
 static var _noise: FastNoiseLite
+static var _macro_noise: FastNoiseLite
 
 ## Everything the mesher needs to colour the faces of one chunk.
 class Context:
@@ -46,6 +51,7 @@ class Context:
 	var slope_cos_start := 1.0
 	var slope_cos_end := 0.0
 	var variation := 0.0
+	var macro := 0.0
 	var cliff_darken := 0.0
 	var lip_height := 0.0
 	var smooth := false
@@ -64,6 +70,8 @@ class Context:
 	var min_z := 0
 	var vw := 0
 	var ao := PackedFloat32Array()
+	# Macro variation per vertex of the chunk (signed shade offset), empty when off.
+	var macro_shade := PackedFloat32Array()
 	# Border-noise offset (in cells) per vertex of the chunk, empty when off.
 	var jitter := PackedVector2Array()
 	# Baked top-face colours of the chunk, 2 per cell.
@@ -112,6 +120,7 @@ static func settings(terrain: Node3D) -> Dictionary:
 		"slope_end": float(biome.slope_end),
 		"ao": clampf(float(biome.ambient_occlusion), 0.0, 1.0),
 		"variation": clampf(float(biome.variation), 0.0, 0.5),
+		"macro": clampf(float(biome.macro_variation), 0.0, 0.5),
 		"cliff_darken": clampf(float(biome.cliff_darken), 0.0, 1.0),
 		"cliff_lip": maxf(float(biome.cliff_lip), 0.0),
 		"smooth": Meta.get_bool(terrain, Meta.SHADE_SMOOTH, Meta.DEFAULT_SHADE_SMOOTH),
@@ -123,11 +132,12 @@ static func is_enabled(s: Dictionary) -> bool:
 	var slope: float = s["slope"]
 	var ao: float = s["ao"]
 	var variation: float = s["variation"]
+	var macro: float = s["macro"]
 	var cliff_darken: float = s["cliff_darken"]
 	var cliff_lip: float = s["cliff_lip"]
 	return (
 		blend > 0 or noise > 0.0 or slope > 0.0
-		or ao > 0.0 or variation > 0.0
+		or ao > 0.0 or variation > 0.0 or macro > 0.0
 		or cliff_darken > 0.0 or cliff_lip > 0.0
 	)
 
@@ -166,6 +176,7 @@ static func prepare(terrain: Node3D, carve: PackedFloat32Array, min_x: int, min_
 	ctx.slope_cos_start = cos(deg_to_rad(slope_start))
 	ctx.slope_cos_end = cos(deg_to_rad(maxf(slope_end, slope_start + 0.01)))
 	ctx.variation = s["variation"]
+	ctx.macro = s["macro"]
 	ctx.cliff_darken = s["cliff_darken"]
 	ctx.lip_height = s["cliff_lip"]
 	ctx.smooth = s["smooth"]
@@ -206,6 +217,9 @@ static func prepare(terrain: Node3D, carve: PackedFloat32Array, min_x: int, min_
 
 	var jitter := _border_jitter(ctx.noise, min_x, min_z, max_x, max_z)
 	ctx.jitter = jitter
+	var macro := _macro_offsets(ctx.macro, spacing, half, min_x, min_z, max_x, max_z)
+	ctx.macro_shade = macro
+	var has_macro := not macro.is_empty()
 
 	# Colour of every top face of the chunk, in one tight loop (locals only:
 	# much cheaper in GDScript than a function call per face).
@@ -346,6 +360,11 @@ static func prepare(terrain: Node3D, carve: PackedFloat32Array, min_x: int, min_
 							tint = 1.0 - (1.0 - tint) * (1.0 - k)
 
 				var shade := (factors[i00] + factors[i00 + vw + 1] + factors[i_mid]) * 0.3333333
+				var warm := 0.0
+				if has_macro:
+					var m := (macro[i00] + macro[i00 + vw + 1] + macro[i_mid]) * 0.3333333
+					shade *= 1.0 + m
+					warm = m * 0.3
 				var tex_shade := shade
 				if variation > 0.0:
 					var face_hash := x * 374761393 + z * 668265263 + tri * 1442695041
@@ -353,10 +372,10 @@ static func prepare(terrain: Node3D, carve: PackedFloat32Array, min_x: int, min_
 					face_hash = face_hash ^ (face_hash >> 16)
 					var value := shade * (1.0 + (float(face_hash & 0xFFFF) / 32767.5 - 1.0) * variation)
 					tex_shade = value
-					var warmth := (float((face_hash >> 16) & 0xFFFF) / 32767.5 - 1.0) * variation * 0.35
+					var warmth := (float((face_hash >> 16) & 0xFFFF) / 32767.5 - 1.0) * variation * 0.35 + warm
 					c = Color(c.r * value * (1.0 + warmth), c.g * value, c.b * value * (1.0 - warmth))
 				else:
-					c = Color(c.r * shade, c.g * shade, c.b * shade)
+					c = Color(c.r * shade * (1.0 + warm), c.g * shade, c.b * shade * (1.0 - warm))
 				var face_index := ((z - min_z) * cw + (x - min_x)) * 2 + tri
 				faces[face_index] = c.clamp()
 				if splat:
@@ -500,6 +519,13 @@ static func prepare_noise() -> void:
 		_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 		_noise.seed = 1337
 		_noise.frequency = BORDER_NOISE_FREQUENCY
+	if _macro_noise == null:
+		_macro_noise = FastNoiseLite.new()
+		_macro_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		_macro_noise.seed = 7331
+		_macro_noise.frequency = 1.0 / MACRO_SIZE
+		_macro_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+		_macro_noise.fractal_octaves = 3
 
 ## Offset (in cells) of every chunk vertex for the noisy style borders.
 static func _border_jitter(noise: float, min_x: int, min_z: int, max_x: int, max_z: int) -> PackedVector2Array:
@@ -515,6 +541,25 @@ static func _border_jitter(noise: float, min_x: int, min_z: int, max_x: int, max
 				jitter[k] = Vector2(_noise.get_noise_2d(vx, vz), _noise.get_noise_2d(vx + 71.3, vz - 37.9)) * noise
 				k += 1
 	return jitter
+
+## Macro variation of every chunk vertex: a signed shade offset (-amount
+## to +amount / 2) from a world-space noise, so chunks join seamlessly. Empty when off.
+static func _macro_offsets(amount: float, spacing: float, half: float, min_x: int, min_z: int, max_x: int, max_z: int) -> PackedFloat32Array:
+	var offsets := PackedFloat32Array()
+	if amount <= 0.0:
+		return offsets
+	prepare_noise()
+	offsets.resize((max_x - min_x + 1) * (max_z - min_z + 1))
+	var k := 0
+	for vz in range(min_z, max_z + 1):
+		var wz := float(vz) * spacing - half
+		for vx in range(min_x, max_x + 1):
+			# FBM output rarely leaves +-0.5: stretched so `amount` is the swing.
+			# Lighter patches get half of it, so bright colours do not wash out.
+			var n := clampf(_macro_noise.get_noise_2d(float(vx) * spacing - half, wz) * 2.0, -1.0, 1.0)
+			offsets[k] = (n if n < 0.0 else n * 0.5) * amount
+			k += 1
+	return offsets
 
 ## Smooth Ground: the colour of every chunk vertex used by an untextured top,
 ## computed like a face colour but at the vertex (style blend, slope from the
@@ -547,6 +592,8 @@ static func _prepare_vertex_colors(ctx: Context, terrain: Node3D, cell_flags: Pa
 	var cos_start := ctx.slope_cos_start
 	var cos_end := ctx.slope_cos_end
 	var variation := ctx.variation
+	var macro := ctx.macro_shade
+	var has_macro := not macro.is_empty()
 	var has_holes := not holes.is_empty()
 	var inv_spacing := 1.0 / spacing
 	var splat := not ctx.layers.is_empty()
@@ -665,6 +712,10 @@ static func _prepare_vertex_colors(ctx: Context, terrain: Node3D, cell_flags: Pa
 						tint = 1.0 - (1.0 - tint) * (1.0 - k)
 
 			var shade := factors[vi]
+			var warm := 0.0
+			if has_macro:
+				shade *= 1.0 + macro[vi]
+				warm = macro[vi] * 0.3
 			var tex_shade := shade
 			if variation > 0.0:
 				var vertex_hash := vx * 374761393 + vz * 668265263 + 7 * 1442695041
@@ -672,10 +723,10 @@ static func _prepare_vertex_colors(ctx: Context, terrain: Node3D, cell_flags: Pa
 				vertex_hash = vertex_hash ^ (vertex_hash >> 16)
 				var value := shade * (1.0 + (float(vertex_hash & 0xFFFF) / 32767.5 - 1.0) * variation)
 				tex_shade = value
-				var warmth := (float((vertex_hash >> 16) & 0xFFFF) / 32767.5 - 1.0) * variation * 0.35
+				var warmth := (float((vertex_hash >> 16) & 0xFFFF) / 32767.5 - 1.0) * variation * 0.35 + warm
 				c = Color(c.r * value * (1.0 + warmth), c.g * value, c.b * value * (1.0 - warmth))
 			else:
-				c = Color(c.r * shade, c.g * shade, c.b * shade)
+				c = Color(c.r * shade * (1.0 + warm), c.g * shade, c.b * shade * (1.0 - warm))
 			colors[vi] = c.clamp()
 			if splat:
 				_store_splat(ctx, vi, wa, wb, tex_shade, tint)
