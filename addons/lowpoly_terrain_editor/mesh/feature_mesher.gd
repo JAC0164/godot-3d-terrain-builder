@@ -52,9 +52,12 @@ static func start(terrain: Node3D, carve: PackedFloat32Array) -> Dictionary:
 ## its terrain goes must be given to wait_threads().
 ## `split`: no mesh; each group's triangles are cut by the ground chunk under
 ## their centre (on the worker too), and step() fills job["chunks"]
-## {chunk index (z * chunks + x): Array of [material, vertices, normals,
-## uvs]} and job["chunk_faces"] {chunk index: collision faces}; a streamed
-## game puts each piece under its chunk (TerrainRuntime). Same triangles as
+## {chunk index (z * chunks + x): Array of [material, packed piece]} and
+## job["chunk_faces"] {chunk index: Array of packed collision faces}; a
+## streamed game keeps them for the whole map and puts each piece under its
+## chunk when it is built (TerrainRuntime). Pieces and faces are kept
+## compressed (pack_arrays, ~6x smaller: 16.5 -> 2.7 MB for a 1.5 km world):
+## piece_arrays() / unpack_faces() give the arrays back. Same triangles as
 ## the mesh, in the same order within a chunk.
 static func start_threaded(terrain: Node3D, carve: PackedFloat32Array, split: bool = false) -> Dictionary:
 	var job := start(terrain, carve)
@@ -193,31 +196,80 @@ static func chunk_grid(terrain: Node3D) -> Vector3:
 	return Vector3(world_size * 0.5, world_size / float(cells) * float(Meta.TERRAIN_CHUNK_CELLS),
 		TerrainMesher.chunk_count(terrain))
 
-## _packed() geometry cut by chunk: {"pieces": {chunk index: [vertices,
-## normals, uvs]}, "faces": {chunk index: collision faces}} (faces only of
-## what collides: a road's surface, a river's bed).
+## _packed() geometry cut by chunk: {"pieces": {chunk index:
+## pack_arrays([vertices, normals, uvs])}, "faces": {chunk index:
+## pack_arrays([collision faces])}} (faces only of what collides: a road's
+## surface, a river's bed).
 static func _split(geometry: Dictionary, is_road: bool, grid: Vector3) -> Dictionary:
 	var vertices: PackedVector3Array = geometry["vertices"]
 	var normals: PackedVector3Array = geometry["normals"]
 	var uvs: PackedVector2Array = geometry["uvs"]
 	var pieces := {}
+	var faces := {}
 	var by_chunk := _chunk_triangles(vertices, grid)
 	for index: int in by_chunk:
 		var triangles: PackedInt32Array = by_chunk[index]
-		pieces[index] = [_pick(vertices, triangles), _pick(normals, triangles),
-			_pick_uvs(uvs, triangles) if not uvs.is_empty() else PackedVector2Array()]
-	var faces := {}
-	if is_road:
-		for index: int in pieces:
-			var piece: Array = pieces[index]
-			faces[index] = piece[0]
-	elif geometry.has("collision_vertices"):
+		var piece_vertices := _pick(vertices, triangles)
+		pieces[index] = pack_arrays([piece_vertices, _pick(normals, triangles),
+			_pick_uvs(uvs, triangles) if not uvs.is_empty() else PackedVector2Array()])
+		if is_road:
+			faces[index] = pack_arrays([piece_vertices])
+	if not is_road and geometry.has("collision_vertices"):
 		var bed: PackedVector3Array = geometry["collision_vertices"]
 		var bed_by_chunk := _chunk_triangles(bed, grid)
 		for index: int in bed_by_chunk:
 			var bed_triangles: PackedInt32Array = bed_by_chunk[index]
-			faces[index] = _pick(bed, bed_triangles)
+			faces[index] = pack_arrays([_pick(bed, bed_triangles)])
 	return {"pieces": pieces, "faces": faces}
+
+## Packed arrays (PackedVector3Array / PackedVector2Array) kept compressed:
+## [zstd bytes, raw size, [kind, count] per array]. Bit-exact round trip
+## (unpack_arrays).
+static func pack_arrays(arrays: Array) -> Array:
+	var raw := PackedByteArray()
+	var layout: Array = []
+	for value: Variant in arrays:
+		if value is PackedVector3Array:
+			var v3: PackedVector3Array = value
+			layout.append([3, v3.size()])
+			raw.append_array(v3.to_byte_array())
+		else:
+			var v2: PackedVector2Array = value
+			layout.append([2, v2.size()])
+			raw.append_array(v2.to_byte_array())
+	return [raw.compress(FileAccess.COMPRESSION_ZSTD), raw.size(), layout]
+
+## The arrays of a pack_arrays() result, in order.
+static func unpack_arrays(packed: Array) -> Array:
+	var compressed: PackedByteArray = packed[0]
+	var raw_size: int = packed[1]
+	var raw := compressed.decompress(raw_size, FileAccess.COMPRESSION_ZSTD)
+	var out: Array = []
+	var at := 0
+	for entry: Array in packed[2]:
+		var kind: int = entry[0]
+		var count: int = entry[1]
+		var size := count * (12 if kind == 3 else 8)
+		var part := raw.slice(at, at + size)
+		out.append(part.to_vector3_array() if kind == 3 else part.to_vector2_array())
+		at += size
+	return out
+
+## A split job piece (job["chunks"] entry) as [material, vertices, normals, uvs].
+static func piece_arrays(piece: Array) -> Array:
+	var packed: Array = piece[1]
+	var arrays := unpack_arrays(packed)
+	return [piece[0], arrays[0], arrays[1], arrays[2]]
+
+## A chunk's collision faces of a split job (job["chunk_faces"] entry), all
+## groups in order.
+static func unpack_faces(packed_list: Array) -> PackedVector3Array:
+	var faces := PackedVector3Array()
+	for packed: Array in packed_list:
+		var arrays := unpack_arrays(packed)
+		var part: PackedVector3Array = arrays[0]
+		faces.append_array(part)
+	return faces
 
 ## {chunk index: indices of the triangles whose centre is over that chunk,
 ## in order} (a counting sort: one pass to count, one to place).
@@ -288,15 +340,14 @@ static func _add_split_group(terrain: Node3D, job: Dictionary, feature_type: Str
 	for index: int in pieces:
 		var piece: Array = pieces[index]
 		var list: Array = chunks.get(index, [])
-		list.append([material, piece[0], piece[1], piece[2]])
+		list.append([material, piece])
 		chunks[index] = list
 	if _any_collision(group, feature_type, is_road):
 		var chunk_faces: Dictionary = job["chunk_faces"]
 		var faces: Dictionary = geometry["faces"]
 		for index: int in faces:
-			var add: PackedVector3Array = faces[index]
-			var all: PackedVector3Array = chunk_faces.get(index, PackedVector3Array())
-			all.append_array(add)
+			var all: Array = chunk_faces.get(index, [])
+			all.append(faces[index])
 			chunk_faces[index] = all
 
 ## _add_group() from _packed() geometry (no conversion on the main thread).

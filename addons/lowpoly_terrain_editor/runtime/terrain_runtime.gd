@@ -147,6 +147,10 @@ signal chunk_details_changed(chunk_x: int, chunk_z: int)
 ## Compute the faces of the streamed chunks on worker threads. Off: on the
 ## main thread, one chunk at a time (15 to 30 ms each on a laptop).
 @export var ground_threads := true
+## Store the streamed ground's vertices compressed (16 bytes instead of 24:
+## a third less video memory and vertex reading; positions within ~1 mm).
+## In game only: the editor's streamed map keeps exact vertices.
+@export var compress_vertices := true
 ## Low-detail ground past `ground_distance`, up to this distance: blocks of
 ## 4 x 4 chunks with one vertex in `far_step`, one draw call each, no
 ## collision or details. 0 = nothing past `ground_distance`.
@@ -216,11 +220,15 @@ var _ground_tasks: Dictionary = {}
 ## for when the runtime goes.
 var _feature_jobs: Array[Dictionary] = []
 ## stream_ground in game: roads and rivers cut by chunk (FeatureMesher split
-## job): chunk -> Array of [material, vertices, normals, uvs], chunk ->
-## collision faces, and the built chunks still waiting for their piece.
+## job): chunk -> Array of [material, packed piece], chunk -> Array of
+## packed collision faces (compressed, for the whole map: FeatureMesher
+## piece_arrays / unpack_faces), and the built chunks still waiting for
+## their piece.
 var _split_features := false
-## stream_ground: collision faces of the built chunks, made on the worker
-## with their mesh (no get_faces() read back on the main thread).
+## stream_ground: what the collision of each built chunk is made of, made on
+## the worker with its mesh (no get_faces() read back on the main thread):
+## its height map (TerrainMesher.height_field: [map_data, side, transform],
+## ~4 KB) or, for a chunk with cliff walls, its faces.
 var _chunk_face_cache: Dictionary = {}
 var _road_pieces: Dictionary = {}
 var _road_faces: Dictionary = {}
@@ -393,6 +401,16 @@ func _reset_build_state() -> void:
 	_stale.clear()
 	_shape_dirty.clear()
 
+## A streamed game (stream_ground, not the editor) drops the vertex mask
+## (Meta.MASK, one float per vertex: 4 MB for 1 024 cells): only terrains
+## made before the cell flags (Meta.CELL_ACTIVE) read it, and the brushes,
+## which a game does not use. Left as an empty array (readers take its size).
+func _free_legacy_mask() -> void:
+	if not _ground_streaming or _editor_stream or Engine.is_editor_hint():
+		return
+	if _terrain.has_meta(Meta.CELL_ACTIVE) and _terrain.has_meta(Meta.MASK):
+		_terrain.set_meta(Meta.MASK, PackedFloat32Array())
+
 ## Load steps of the ground, nearest chunk first: chunk meshes, waterholes,
 ## roads and rivers, then the ground collision.
 func _queue_ground_steps(order: Array[Vector2i]) -> void:
@@ -400,7 +418,8 @@ func _queue_ground_steps(order: Array[Vector2i]) -> void:
 	_steps.append(func() -> void:
 		StylePalette.ensure_material_data(_terrain)
 		_builder.rebuild_river_carve(_terrain)
-		_builder._ensure_chunk_container(_terrain))
+		_builder._ensure_chunk_container(_terrain)
+		_free_legacy_mask())
 	# Shaders compile once, each in a step of its own (~25 ms each on a
 	# laptop), not in the frame of the first mesh that uses them.
 	_steps.append(TerrainBuilder.warm_ground_material.bind(_terrain))
@@ -880,6 +899,7 @@ func _pump_ground(budget_usec: int, with_far: bool = true) -> bool:
 				# worker too: the main thread only uploads (_finish_ground).
 				if looks.is_empty():
 					looks = TerrainMesher.chunk_looks(_terrain)
+					looks["compress"] = compress_vertices and not _editor_stream
 				var chunk_looks := looks
 				_run_task(c, func(source: Node3D) -> Variant:
 					var chunk_arrays := TerrainMesher.build_chunk_arrays(source, carve, c.x, c.y)
@@ -896,9 +916,12 @@ func _pump_ground(budget_usec: int, with_far: bool = true) -> bool:
 				var data: Dictionary = _far_data.get(block, {})
 				var far_carve := _ground_carve
 				var step := _far_step()
+				var compress := compress_vertices and not _editor_stream
 				_run_task(key, func(source: Node3D) -> Variant:
 					var block_data := data if not data.is_empty() else LodMesher.block_data(source, far_carve, block.x, block.y, step)
-					return {"data": block_data, "mask": mask, "arrays": LodMesher.block_arrays(block_data, mask)})
+					var block_arrays := LodMesher.block_arrays(block_data, mask)
+					return {"data": block_data, "mask": mask,
+						"arrays": LodMesher.pack_block(block_arrays) if compress else block_arrays})
 			else:
 				var queued_hole: Array = _hole_queue.pop_front()
 				var index: int = queued_hole[1]
@@ -973,8 +996,8 @@ func _take_road_pieces(job: Dictionary) -> void:
 			var body: StaticBody3D = _ground_shapes[key]
 			var shape := ConcavePolygonShape3D.new()
 			shape.backface_collision = true
-			var road_faces: PackedVector3Array = _road_faces[key]
-			shape.set_faces(road_faces)
+			var packed_faces: Array = _road_faces[key]
+			shape.set_faces(FeatureMesher.unpack_faces(packed_faces))
 			body.shape_owner_add_shape(body.create_shape_owner(body), shape)
 	_road_queue.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 
@@ -984,7 +1007,8 @@ func _attach_roads(c: Vector2i) -> void:
 	if chunk == null or not _road_pieces.has(c) or chunk.has_node(ROADS_NAME):
 		return
 	var mesh := ArrayMesh.new()
-	for piece: Array in _road_pieces[c]:
+	for packed_piece: Array in _road_pieces[c]:
+		var piece := FeatureMesher.piece_arrays(packed_piece)
 		var material: Material = piece[0]
 		var vertices: PackedVector3Array = piece[1]
 		var normals: PackedVector3Array = piece[2]
@@ -1022,7 +1046,8 @@ func _finish_ground(c: Vector2i, arrays: Dictionary) -> void:
 	var mesh: ArrayMesh = parts["mesh"]
 	var caster: Array = parts["caster"]
 	var chunk := _builder.apply_chunk_mesh(_terrain, c.x, c.y, mesh, caster)
-	_chunk_face_cache[c] = parts["faces"]
+	var field: Array = parts.get("field", [])
+	_chunk_face_cache[c] = field if not field.is_empty() else parts["faces"]
 	# Its far block still shows it: hidden until the block is rebuilt
 	# without it (_finish_far_block), then swapped in the same frame.
 	var block := _block_of(c)
@@ -1171,29 +1196,52 @@ func _far_step() -> int:
 
 ## The chunk's ground collision: a body of its own under the chunk, filled
 ## before it enters the tree (with Jolt, a shape added to a body in the tree
-## rebuilds the whole body).
+## rebuilds the whole body). A height map when the chunk has no cliff wall
+## (_chunk_face_cache), else its triangles; the roads on it are triangles.
 func _add_chunk_shape(c: Vector2i) -> void:
 	var chunk := _chunk_node(c)
-	var faces: PackedVector3Array
-	if _chunk_face_cache.has(c):
-		var cached: PackedVector3Array = _chunk_face_cache[c]
-		faces = cached.duplicate()
-	else:
-		faces = _chunk_faces(c.x, c.y)
-	if _road_faces.has(c):
-		var road_faces: PackedVector3Array = _road_faces[c]
-		faces.append_array(road_faces)
-	if chunk == null or faces.is_empty():
+	if chunk == null:
 		return
-	var shape := ConcavePolygonShape3D.new()
-	shape.backface_collision = true
-	shape.set_faces(faces)
+	var cached: Variant = _chunk_face_cache.get(c)
 	var body := StaticBody3D.new()
 	body.name = CHUNK_COLLISION_NAME
 	var layer_number := clampi(Meta.get_int(_terrain, Meta.COLLISION_LAYER, 1), 1, 32)
 	body.collision_layer = 1 << (layer_number - 1)
 	body.collision_mask = 0
-	body.shape_owner_add_shape(body.create_shape_owner(body), shape)
+	if cached is Array:
+		# Its height map, and the roads on it as a second shape.
+		var field: Array = cached
+		var height_map := HeightMapShape3D.new()
+		height_map.map_width = field[1]
+		height_map.map_depth = field[1]
+		height_map.map_data = field[0]
+		var owner_id := body.create_shape_owner(body)
+		body.shape_owner_add_shape(owner_id, height_map)
+		var field_transform: Transform3D = field[2]
+		body.shape_owner_set_transform(owner_id, field_transform)
+		if _road_faces.has(c):
+			var roads := ConcavePolygonShape3D.new()
+			roads.backface_collision = true
+			var road_packed: Array = _road_faces[c]
+			roads.set_faces(FeatureMesher.unpack_faces(road_packed))
+			body.shape_owner_add_shape(body.create_shape_owner(body), roads)
+	else:
+		var faces: PackedVector3Array
+		if cached is PackedVector3Array:
+			var cached_faces: PackedVector3Array = cached
+			faces = cached_faces.duplicate()
+		else:
+			faces = _chunk_faces(c.x, c.y)
+		if _road_faces.has(c):
+			var chunk_road_faces: Array = _road_faces[c]
+			faces.append_array(FeatureMesher.unpack_faces(chunk_road_faces))
+		if faces.is_empty():
+			body.free()
+			return
+		var shape := ConcavePolygonShape3D.new()
+		shape.backface_collision = true
+		shape.set_faces(faces)
+		body.shape_owner_add_shape(body.create_shape_owner(body), shape)
 	NodeNames.add(chunk, body)
 	_ground_shapes[c] = body
 

@@ -244,7 +244,40 @@ static func build_chunk_arrays(terrain: Node3D, carve: PackedFloat32Array, chunk
 				if open_forward: _add_shaded_cliff_quad(base_y, cliff_offset, shading, cliff_group, x, z, 2, style_id, fx + 0.5, fz, p10, p00, Vector3.FORWARD)
 				if open_back: _add_shaded_cliff_quad(base_y, cliff_offset, shading, cliff_group, x, z, 3, style_id, fx + 0.5, fz + 1.0, p01, p11, Vector3.BACK)
 
-	return {"top_groups": top_groups, "cliff_groups": cliff_groups, "shaded": shaded, "shading": shading}
+	# Every cell of the chunk and of the ring around it painted (no cliff
+	# wall) and a square chunk: its ground is a height map (height_field).
+	var full := max_x - min_x == max_z - min_z and not flags.has(0)
+	return {"top_groups": top_groups, "cliff_groups": cliff_groups, "shaded": shaded, "shading": shading,
+		"corners": corners, "corners_w": corners_w, "full": full}
+
+## The chunk's ground as a height map, for its collision (HeightMapShape3D:
+## ~25x less memory than its triangles and ~40x faster to make, with Jolt):
+## [map_data, side, shape transform (chunk-local = terrain-local)], or []
+## when the chunk has cliff walls (unpainted cells in it or beside it) or is
+## not square. The shape is turned 90 degrees about Y: a height map splits
+## its cells along the (x+1, z)-(x, z+1) diagonal, the ground along
+## (x, z)-(x+1, z+1); turned, they match to 0.1 mm
+## (tools/check_heightmap_collision.gd). Heights are divided by the cell
+## spacing, which the transform scales back (a uniform scale).
+static func height_field(arrays: Dictionary) -> Array:
+	if not arrays.get("full", false):
+		return []
+	var corners: PackedVector3Array = arrays["corners"]
+	var n: int = arrays["corners_w"]
+	if n < 2 or corners.size() != n * n:
+		return []
+	var spacing := corners[1].x - corners[0].x
+	if spacing <= 0.0:
+		return []
+	var inverse := 1.0 / spacing
+	var data := PackedFloat32Array()
+	data.resize(n * n)
+	for j in n:
+		for i in n:
+			data[j * n + i] = corners[(n - 1 - i) * n + j].y * inverse
+	var centre := (corners[0] + corners[n * n - 1]) * 0.5
+	var basis := Basis(Vector3.UP, PI * 0.5).scaled(Vector3(spacing, spacing, spacing))
+	return [data, n, Transform3D(basis, Vector3(centre.x, 0.0, centre.z))]
 
 ## The chunk mesh from its faces grouped by style (style id -> {vertices,
 ## normals, colors}), tops and cliffs apart.
@@ -339,11 +372,19 @@ static func pack_chunk(arrays: Dictionary, looks: Dictionary) -> Dictionary:
 			wall_colors, PackedVector2Array(uvs)])
 	var faces := PackedVector3Array()
 	var vertex_lists: Array = []
+	# looks["compress"] (TerrainRuntime.compress_vertices): tangents for the
+	# compressed vertex format, one PackedFloat32Array per surface.
+	var tangents: Array = []
+	var compress: bool = looks.get("compress", false)
 	for surface: Array in surfaces:
 		var vertices: PackedVector3Array = surface[2]
 		faces.append_array(vertices)
 		vertex_lists.append(vertices)
-	return {"surfaces": surfaces, "faces": faces, "caster": MeshUtils.back_face_arrays(vertex_lists), "shading": arrays["shading"]}
+		if compress:
+			var normals: PackedVector3Array = surface[3]
+			tangents.append(MeshUtils.tangents_for(normals))
+	return {"surfaces": surfaces, "faces": faces, "caster": MeshUtils.back_face_arrays(vertex_lists), "shading": arrays["shading"],
+		"field": height_field(arrays), "tangents": tangents}
 
 ## What pack_chunk() needs from the materials, read on the main thread: per
 ## style id (clamped to the palette, as MaterialFactory does) and side,
@@ -370,7 +411,11 @@ static func assemble_packed(terrain: Node3D, packed: Dictionary) -> Dictionary:
 	if packed.is_empty():
 		return {}
 	var array_mesh := ArrayMesh.new()
+	var tangents: Array = packed.get("tangents", [])
+	var surface_index := -1
 	for surface: Array in packed["surfaces"]:
+		surface_index += 1
+		var surface_tangents: PackedFloat32Array = tangents[surface_index] if surface_index < tangents.size() else PackedFloat32Array()
 		var style_id: int = surface[0]
 		var is_top: bool = surface[1]
 		var vertices: PackedVector3Array = surface[2]
@@ -381,12 +426,13 @@ static func assemble_packed(terrain: Node3D, packed: Dictionary) -> Dictionary:
 			var weights_a: PackedByteArray = surface[6]
 			var weights_b: PackedByteArray = surface[7]
 			MeshUtils.add_splat_surface(array_mesh, vertices, normals, colors, weights_a, weights_b,
-				MaterialFactory.terrain_splat_material(terrain))
+				MaterialFactory.terrain_splat_material(terrain), surface_tangents)
 			continue
 		var material := MaterialFactory.terrain_vertex_color_material(terrain) if style_id < 0 \
 			else MaterialFactory.terrain_style_material(terrain, style_id, is_top)
-		MeshUtils.add_arrays_surface(array_mesh, vertices, normals, material, uvs, colors)
-	return {"mesh": array_mesh, "shading": packed["shading"], "faces": packed["faces"], "caster": packed["caster"]}
+		MeshUtils.add_arrays_surface(array_mesh, vertices, normals, material, uvs, colors, surface_tangents)
+	return {"mesh": array_mesh, "shading": packed["shading"], "faces": packed["faces"], "caster": packed["caster"],
+		"field": packed.get("field", [])}
 
 ## Active flag (TerrainData.cell_active) of the cells [x0, x0 + width) x
 ## [z0, z0 + height), row-major; out-of-grid cells are inactive.

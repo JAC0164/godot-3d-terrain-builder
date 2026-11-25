@@ -174,15 +174,36 @@ static func block_arrays(data: Dictionary, excluded: int) -> Array:
 		return []
 	return [vertices, normals, vertex_colors]
 
-## The block mesh (main thread: shared material), null when empty.
+## block_arrays() as packed arrays, with the tangents of the compressed
+## vertex format (MeshUtils.tangents_for), on the worker:
+## [vertices, normals, colors, tangents], empty when empty.
+static func pack_block(arrays: Array) -> Array:
+	if arrays.is_empty():
+		return []
+	var vertex_list: Array = arrays[0]
+	var normal_list: Array = arrays[1]
+	var color_list: Array = arrays[2]
+	var normals := PackedVector3Array(normal_list)
+	return [PackedVector3Array(vertex_list), normals, PackedColorArray(color_list), MeshUtils.tangents_for(normals)]
+
+## The block mesh (main thread: shared material), null when empty. From
+## block_arrays(), or from pack_block() (compressed vertices).
 static func assemble(terrain: Node3D, arrays: Array) -> ArrayMesh:
 	if arrays.is_empty():
 		return null
 	var mesh := ArrayMesh.new()
+	var material := MaterialFactory.terrain_vertex_color_material(terrain)
+	if arrays.size() == 4:
+		var packed_vertices: PackedVector3Array = arrays[0]
+		var packed_normals: PackedVector3Array = arrays[1]
+		var packed_colors: PackedColorArray = arrays[2]
+		var tangents: PackedFloat32Array = arrays[3]
+		MeshUtils.add_arrays_surface(mesh, packed_vertices, packed_normals, material, PackedVector2Array(), packed_colors, tangents)
+		return mesh
 	var vertices: Array = arrays[0]
 	var normals: Array = arrays[1]
 	var colors: Array = arrays[2]
-	MeshUtils.add_surface(mesh, vertices, normals, MaterialFactory.terrain_vertex_color_material(terrain), [], colors)
+	MeshUtils.add_surface(mesh, vertices, normals, material, [], colors)
 	return mesh
 
 ## A detailed chunk's skirt (see the header), into the build_chunk_arrays()

@@ -89,9 +89,27 @@ static func add_surface(mesh: ArrayMesh, vertices: Array, normals: Array, materi
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 
-## add_surface() from packed arrays, with colours (no conversion).
+## Tangents for compressed vertices (ARRAY_FLAG_COMPRESS_ATTRIBUTES): Godot
+## only compresses normals given with tangents (without, some normals come
+## out turned over). Any unit vector across the normal does (no normal map
+## reads them): 4 floats per vertex. Pure: runs on a worker thread.
+static func tangents_for(normals: PackedVector3Array) -> PackedFloat32Array:
+	var tangents := PackedFloat32Array()
+	tangents.resize(normals.size() * 4)
+	for i in normals.size():
+		var n := normals[i]
+		var t := (n.cross(Vector3.FORWARD) if absf(n.z) < 0.9 else n.cross(Vector3.RIGHT)).normalized()
+		tangents[i * 4] = t.x
+		tangents[i * 4 + 1] = t.y
+		tangents[i * 4 + 2] = t.z
+		tangents[i * 4 + 3] = 1.0
+	return tangents
+
+## add_surface() from packed arrays, with colours (no conversion). With
+## `tangents` (tangents_for), the vertices are stored compressed: 16 bytes
+## instead of 24 for the vertex-coloured ground, positions within ~1 mm.
 static func add_arrays_surface(mesh: ArrayMesh, vertices: PackedVector3Array, normals: PackedVector3Array, material: Material,
-		uvs: PackedVector2Array, colors: PackedColorArray) -> void:
+		uvs: PackedVector2Array, colors: PackedColorArray, tangents: PackedFloat32Array = PackedFloat32Array()) -> void:
 	if vertices.is_empty():
 		return
 	var arrays := []
@@ -102,14 +120,19 @@ static func add_arrays_surface(mesh: ArrayMesh, vertices: PackedVector3Array, no
 		arrays[Mesh.ARRAY_TEX_UV] = uvs
 	if colors.size() == vertices.size():
 		arrays[Mesh.ARRAY_COLOR] = colors
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var flags := 0
+	if tangents.size() == vertices.size() * 4:
+		arrays[Mesh.ARRAY_TANGENT] = tangents
+		flags = Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
 	mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 
 ## Blended-texture surface (TerrainMesher SPLAT_GROUP): colours plus the
 ## layer weights as two RGBA8 CUSTOM arrays (CUSTOM0 = layers 0-3,
 ## CUSTOM1 = 4-7, see terrain_splat.gdshader).
 static func add_splat_surface(mesh: ArrayMesh, vertices: PackedVector3Array, normals: PackedVector3Array,
-		colors: PackedColorArray, weights_a: PackedByteArray, weights_b: PackedByteArray, material: Material) -> void:
+		colors: PackedColorArray, weights_a: PackedByteArray, weights_b: PackedByteArray, material: Material,
+		tangents: PackedFloat32Array = PackedFloat32Array()) -> void:
 	if vertices.is_empty():
 		return
 	var arrays := []
@@ -121,6 +144,9 @@ static func add_splat_surface(mesh: ArrayMesh, vertices: PackedVector3Array, nor
 	arrays[Mesh.ARRAY_CUSTOM1] = weights_b
 	var flags := (Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) \
 		| (Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT)
+	if tangents.size() == vertices.size() * 4:
+		arrays[Mesh.ARRAY_TANGENT] = tangents
+		flags |= Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
 	mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 

@@ -25,6 +25,7 @@ const MapRecipe = preload(ADDON + "generation/map_recipe.gd")
 const TerrainRuntime = preload(ADDON + "runtime/terrain_runtime.gd")
 const TerrainMesher = preload(ADDON + "mesh/terrain_mesher.gd")
 const TerrainBuilder = preload(ADDON + "mesh/terrain_builder.gd")
+const FeatureMesher = preload(ADDON + "mesh/feature_mesher.gd")
 const WaterholeStyle = preload(ADDON + "styles/waterhole_style.gd")
 const WaterholeMesher = preload(ADDON + "mesh/waterhole_mesher.gd")
 const LodMesher = preload(ADDON + "mesh/lod_mesher.gd")
@@ -260,10 +261,16 @@ func _check(label: String, exact: bool) -> void:
 		if _runtime._road_faces.has(c) and _runtime._ground_shapes.has(c):
 			var body := chunk.get_node(TerrainRuntime.CHUNK_COLLISION_NAME) as StaticBody3D
 			var faces := 0
+			var height_maps := 0
 			for owner_id in body.get_shape_owners():
 				for i in range(body.shape_owner_get_shape_count(owner_id)):
-					faces += (body.shape_owner_get_shape(owner_id, i) as ConcavePolygonShape3D).get_faces().size()
-			var expected: int = chunk.mesh.get_faces().size() + (_runtime._road_faces[c] as PackedVector3Array).size()
+					var shape := body.shape_owner_get_shape(owner_id, i)
+					if shape is HeightMapShape3D:
+						height_maps += 1
+					else:
+						faces += (shape as ConcavePolygonShape3D).get_faces().size()
+			# A chunk without cliff walls: its ground is a height map.
+			var expected: int = (0 if height_maps == 1 else chunk.mesh.get_faces().size()) 				+ FeatureMesher.unpack_faces(_runtime._road_faces[c]).size()
 			if faces != expected:
 				errors += 1
 				print("FAIL %s: chunk %s collision has %d face vertices, %d expected (ground + roads)" % [label, c, faces, expected])
@@ -305,7 +312,10 @@ func _reference_hash(c: Vector2i) -> int:
 		var arrays := TerrainMesher.build_chunk_arrays(_terrain, _carve, c.x, c.y)
 		if _runtime._far_on:
 			LodMesher.add_chunk_skirt(_terrain, _carve, arrays, c.x, c.y, _runtime._far_step())
-		var parts := TerrainMesher.assemble_chunk(_terrain, arrays)
+		# Compressed vertices like the runtime's (compress_vertices).
+		var looks := TerrainMesher.chunk_looks(_terrain)
+		looks["compress"] = _runtime.compress_vertices
+		var parts := TerrainMesher.assemble_packed(_terrain, TerrainMesher.pack_chunk(arrays, looks))
 		var mesh: ArrayMesh = parts["mesh"]
 		_reference[c] = _mesh_hash(mesh)
 	return _reference[c]

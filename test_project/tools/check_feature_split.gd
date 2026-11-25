@@ -68,7 +68,8 @@ func _check(label: String, terrain: Node3D) -> void:
 	var vertices_total := 0
 	for index: int in chunks:
 		var bounds := Rect2(Vector2(index % count, index / count) * grid.y - Vector2(grid.x, grid.x), Vector2(grid.y, grid.y))
-		for piece: Array in chunks[index]:
+		for packed_piece: Array in chunks[index]:
+			var piece := FeatureMesher.piece_arrays(packed_piece)
 			var material: Material = piece[0]
 			var vertices: PackedVector3Array = piece[1]
 			vertices_total += vertices.size()
@@ -87,7 +88,7 @@ func _check(label: String, terrain: Node3D) -> void:
 					outside += 1
 	var chunk_faces: Dictionary = job["chunk_faces"]
 	for index: int in chunk_faces:
-		_sum(got, "collision", chunk_faces[index], PackedVector3Array(), PackedVector2Array())
+		_sum(got, "collision", FeatureMesher.unpack_faces(chunk_faces[index]), PackedVector3Array(), PackedVector2Array())
 	_report(outside == 0, "%s: %d triangles outside their chunk" % [label, outside])
 	for key: String in expected:
 		var e: Array = expected[key]
