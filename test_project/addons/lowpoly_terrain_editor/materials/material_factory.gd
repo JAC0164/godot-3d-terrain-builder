@@ -311,6 +311,8 @@ static func terrain_splat_material(terrain: Node3D) -> Material:
 		inv_tiles.append(1.0 / maxf(tile, 0.001))
 	material.set_shader_parameter("inv_tile_a", Vector4(inv_tiles[0], inv_tiles[1], inv_tiles[2], inv_tiles[3]))
 	material.set_shader_parameter("inv_tile_b", Vector4(inv_tiles[4], inv_tiles[5], inv_tiles[6], inv_tiles[7]))
+	if custom == null or _declares_uniform(custom.shader, "mean_color"):
+		material.set_shader_parameter("mean_color", splat_means(terrain, layers))
 	if pbr:
 		var slots := Vector4i(-1, -1, -1, -1)
 		for slot in pbr_layers.size():
@@ -321,14 +323,35 @@ static func terrain_splat_material(terrain: Node3D) -> Material:
 		material.set_shader_parameter("pbr_layer", slots)
 	return material
 
+## Mean colour of each blended layer: linear rgb from the palette's
+## "top_mean" (StylePalette.fill_texture_means), a = 1; a = 0 when unknown
+## (the shader then reads it from the texture's last mip).
+static func splat_means(terrain: Node3D, layers: Array[int]) -> PackedVector4Array:
+	var means := PackedVector4Array()
+	for i in MAX_SPLAT_LAYERS:
+		var mean := Vector4.ZERO
+		if i < layers.size():
+			var srgb: Variant = _style(terrain, layers[i]).get("top_mean", null)
+			if srgb is Color:
+				var color: Color = srgb
+				var linear := color.srgb_to_linear()
+				mean = Vector4(linear.r, linear.g, linear.b, 1.0)
+		means.append(mean)
+	return means
+
 static func _custom_splat_material(terrain: Node3D) -> ShaderMaterial:
 	var custom := TerrainBiome.of(terrain).ground_material as ShaderMaterial
 	if custom == null or custom.shader == null:
 		return null
-	for uniform: Dictionary in custom.shader.get_shader_uniform_list():
-		if uniform["name"] == "layer_0":
-			return custom
-	return null
+	return custom if _declares_uniform(custom.shader, "layer_0") else null
+
+static func _declares_uniform(shader: Shader, uniform_name: String) -> bool:
+	if shader == null:
+		return false
+	for uniform: Dictionary in shader.get_shader_uniform_list():
+		if uniform["name"] == uniform_name:
+			return true
+	return false
 
 ## `target` takes the shader and every uniform value of `source`.
 static func _copy_material_values(source: ShaderMaterial, target: ShaderMaterial) -> void:
@@ -339,16 +362,22 @@ static func _copy_material_values(source: ShaderMaterial, target: ShaderMaterial
 		var uniform_name: String = uniform["name"]
 		target.set_shader_parameter(uniform_name, source.get_shader_parameter(uniform_name))
 
-static func _splat_shader(cull: BaseMaterial3D.CullMode, pbr: bool = false) -> Shader:
-	if cull == BaseMaterial3D.CULL_BACK and not pbr:
+## The blended-texture shader for a cull mode / PBR. On phones
+## (`mobile`, default OS.has_feature("mobile")) its textures use trilinear
+## filtering instead of anisotropic: cheaper on mobile GPUs, the ground is
+## seen at grazing angles less sharply far away.
+static func _splat_shader(cull: BaseMaterial3D.CullMode, pbr: bool = false, mobile: bool = OS.has_feature("mobile")) -> Shader:
+	if cull == BaseMaterial3D.CULL_BACK and not pbr and not mobile:
 		return TerrainSplatShader
-	var key := "%d|%s" % [cull, pbr]
+	var key := "%d|%s|%s" % [cull, pbr, mobile]
 	var shader: Shader = _splat_shaders.get(key, null)
 	if shader == null:
 		shader = Shader.new()
 		var code := TerrainSplatShader.code.replace("cull_back", "cull_disabled") if cull != BaseMaterial3D.CULL_BACK else TerrainSplatShader.code
 		if pbr:
 			code = code.replace("shader_type spatial;", "shader_type spatial;\n#define USE_PBR")
+		if mobile:
+			code = code.replace("filter_linear_mipmap_anisotropic", "filter_linear_mipmap")
 		shader.code = code
 		_splat_shaders[key] = shader
 	return shader

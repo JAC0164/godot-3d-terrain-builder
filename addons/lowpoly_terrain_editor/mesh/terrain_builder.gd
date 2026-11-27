@@ -11,7 +11,8 @@ extends RefCounted
 ##   _GeneratedTerrainMesh                 roads + rivers (must already exist)
 ##   _GeneratedTerrainFeaturePreview       stroke being drawn
 ##   _GeneratedWaterholes/Waterhole_N      mud plates of each dried waterhole
-##   _GeneratedTerrainCollision/...Shape   optional StaticBody3D
+##   _GeneratedTerrainCollision            optional StaticBody3D
+##       /Chunk_X_Z, /Features             a shape per chunk + roads / rivers
 ##
 ## A terrain too big to build whole (streams_in_editor) is built around the
 ## editor camera by its LowpolyTerrainRuntime node instead: the calls below
@@ -36,6 +37,9 @@ const LodMesher = preload("lod_mesher.gd")
 ## camera (LowpolyTerrainRuntime.start_editor_stream): built whole, 1024
 ## cells take ~40 s and 2 M triangles.
 const EDITOR_STREAM_CHUNKS := 16
+## Collision body shape of the roads / rivers (the others: one per chunk,
+## named like it).
+const FEATURE_COLLISION_SHAPE_NAME := "Features"
 
 ## Returns the node that should own generated children (the edited scene
 ## root in the editor) so they are saved with the scene. May return null.
@@ -55,6 +59,11 @@ var _built: Dictionary = {}
 ## physics needs it, so strokes do not pay for it (see request_collision).
 var _collision_pending: Dictionary = {}
 var _collision_requested_ms := 0
+## Collision body: chunks whose mesh changed since their shape was made
+## (instance id -> {chunk name: true}), and the faces of the roads / rivers
+## shape (instance id -> faces), see rebuild_collision.
+var _collision_dirty: Dictionary = {}
+var _feature_shape_faces: Dictionary = {}
 ## Editor: chunk work finished over the next frames after a stroke
 ## ("terrain id|x|z" -> {terrain: WeakRef, key: Vector2i, mesh: bool,
 ## shading: Variant}), see defer_chunk() / process_deferred().
@@ -514,6 +523,10 @@ func rebuild_chunk(terrain: Node3D, chunk_x: int, chunk_z: int, with_details: bo
 func apply_chunk_mesh(terrain: Node3D, chunk_x: int, chunk_z: int, mesh: ArrayMesh, caster: Array = []) -> MeshInstance3D:
 	var chunk := _get_or_create_chunk_node(terrain, chunk_x, chunk_z)
 	chunk.mesh = mesh
+	if terrain.has_node(Meta.GENERATED_COLLISION_BODY_NAME):
+		# Its collision shape is outdated (rebuild_collision makes it again).
+		var dirty: Dictionary = _collision_dirty.get_or_add(terrain.get_instance_id(), {})
+		dirty[String(chunk.name)] = true
 	_update_ground_caster(terrain, chunk, caster)
 	return chunk
 
@@ -884,10 +897,17 @@ func flush_collision() -> void:
 		if is_instance_valid(terrain) and terrain.is_inside_tree():
 			rebuild_collision(terrain, get_feature_collision_faces(terrain))
 
-## Rebuilds the optional collision body from the chunk meshes plus
-## `feature_faces`. When collision is disabled the shape is only disabled.
+## Rebuilds the optional collision body: one shape per chunk mesh (named like
+## the chunk) and one for the roads / rivers (`feature_faces`). Only the
+## chunks whose mesh changed since (or without a shape) get a new one: a
+## stroke on a big map no longer rebuilds the whole-map shape.
+## When collision is disabled the shapes are emptied (made again when it is
+## turned back on: the meshes may change meanwhile).
 func rebuild_collision(terrain: Node3D, feature_faces: PackedVector3Array = PackedVector3Array()) -> void:
-	_collision_pending.erase(terrain.get_instance_id())
+	var id := terrain.get_instance_id()
+	_collision_pending.erase(id)
+	var dirty: Dictionary = _collision_dirty.get(id, {})
+	_collision_dirty.erase(id)
 	var stream := editor_stream(terrain)
 	if stream != null:
 		# One body per detailed chunk (the runtime's), the edited ones again.
@@ -898,44 +918,72 @@ func rebuild_collision(terrain: Node3D, feature_faces: PackedVector3Array = Pack
 
 	if not enabled:
 		if body:
-			var existing_shape := body.get_node_or_null(Meta.GENERATED_COLLISION_SHAPE_NAME) as CollisionShape3D
-			if existing_shape:
-				existing_shape.disabled = true
+			for child in body.get_children():
+				if child is CollisionShape3D:
+					(child as CollisionShape3D).shape = null
+					(child as CollisionShape3D).disabled = true
+		_feature_shape_faces.erase(id)
 		return
 
 	if not body:
 		body = StaticBody3D.new()
 		body.name = Meta.GENERATED_COLLISION_BODY_NAME
 		_add_generated_child(terrain, terrain, body)
-
-	var collision_shape := body.get_node_or_null(Meta.GENERATED_COLLISION_SHAPE_NAME) as CollisionShape3D
-	if not collision_shape:
-		collision_shape = CollisionShape3D.new()
-		collision_shape.name = Meta.GENERATED_COLLISION_SHAPE_NAME
-		_add_generated_child(terrain, body, collision_shape)
+	# Scenes saved with a single whole-map shape.
+	var legacy := body.get_node_or_null(Meta.GENERATED_COLLISION_SHAPE_NAME)
+	if legacy:
+		body.remove_child(legacy)
+		legacy.queue_free()
 
 	var layer_number := clampi(Meta.get_int(terrain, Meta.COLLISION_LAYER, 1), 1, 32)
 	body.collision_layer = 1 << (layer_number - 1)
 	body.collision_mask = 0
 
-	var faces := PackedVector3Array()
+	var wanted := {FEATURE_COLLISION_SHAPE_NAME: true}
 	var container := terrain.get_node_or_null(Meta.GENERATED_CHUNKS_NAME) as Node3D
 	if container:
 		for child in container.get_children():
 			var chunk := child as MeshInstance3D
-			if chunk != null and chunk.mesh != null:
-				faces.append_array(chunk.mesh.get_faces())
+			if chunk == null:
+				continue
+			var shape_name := String(chunk.name)
+			wanted[shape_name] = true
+			var shape_node := _collision_shape_node(terrain, body, shape_name)
+			if shape_node.shape != null and not dirty.has(shape_name):
+				shape_node.disabled = false
+				continue
+			_set_collision_faces(shape_node, chunk.mesh.get_faces() if chunk.mesh != null else PackedVector3Array())
 
-	if not feature_faces.is_empty():
-		faces.append_array(feature_faces)
+	var features := _collision_shape_node(terrain, body, FEATURE_COLLISION_SHAPE_NAME)
+	var previous: Variant = _feature_shape_faces.get(id)
+	if features.shape == null or not (previous is PackedVector3Array) or previous != feature_faces:
+		_set_collision_faces(features, feature_faces)
+		_feature_shape_faces[id] = feature_faces
+	elif features.shape != null:
+		features.disabled = false
 
+	# Shapes of chunks that no longer exist (smaller map).
+	for child in body.get_children():
+		if child is CollisionShape3D and not wanted.has(String(child.name)):
+			body.remove_child(child)
+			child.queue_free()
+
+## Shape node `shape_name` of the collision body, created when missing.
+func _collision_shape_node(terrain: Node3D, body: StaticBody3D, shape_name: String) -> CollisionShape3D:
+	var node := body.get_node_or_null(shape_name) as CollisionShape3D
+	if node == null:
+		node = CollisionShape3D.new()
+		node.name = shape_name
+		_add_generated_child(terrain, body, node)
+	return node
+
+static func _set_collision_faces(node: CollisionShape3D, faces: PackedVector3Array) -> void:
 	if faces.is_empty():
-		collision_shape.shape = null
-		collision_shape.disabled = true
+		node.shape = null
+		node.disabled = true
 		return
-
 	var concave := ConcavePolygonShape3D.new()
 	concave.backface_collision = true
 	concave.set_faces(faces)
-	collision_shape.shape = concave
-	collision_shape.disabled = false
+	node.shape = concave
+	node.disabled = false

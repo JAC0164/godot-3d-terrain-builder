@@ -10,12 +10,17 @@ shader_type spatial;
 // The textures are projected from above (local X / Z), like the UVs of a
 // textured style: one repeat every `tile` metres.
 // Height blend: where weights overlap, each pixel shows the layer whose
-// weight plus local relief (texel brightness minus the texture's mean, read
-// from its last mip) is highest, fading over `blend_depth`: pebbles and
-// cracks poke through instead of two photos fading into each other.
+// weight plus local relief (texel brightness minus the texture's mean) is
+// highest, fading over `blend_depth`: pebbles and cracks poke through instead
+// of two photos fading into each other.
 // Far fade: from `fade_start` to `fade_end` metres the textures turn into
 // their mean colour (no visible repeat from far / from above) and the layer
 // borders widen to a soft blend, like the untextured colours.
+// The means come from `mean_color` (MaterialFactory, from the palette): one
+// texture read per layer near, none beyond `fade_end`. A layer without a
+// known mean (alpha 0) reads it from the texture's last mip.
+// On phones MaterialFactory swaps filter_linear_mipmap_anisotropic for
+// filter_linear_mipmap (trilinear, lighter on mobile GPUs).
 // USE_PBR (MaterialFactory adds the define when a layer has a normal or
 // roughness map): up to 4 layers (`pbr_layer`: their index, -1 = none) also
 // read a normal + roughness map (7 + 8 = 15 texture slots, within the 16 of
@@ -59,6 +64,8 @@ uniform float blend_depth = 0.12;
 uniform float far_blend_depth = 0.6;
 uniform float fade_start = 25.0;
 uniform float fade_end = 90.0;
+// Mean colour (linear rgb) of layers 0-6, a = 1 when known (unset = 0).
+uniform vec4 mean_color[7];
 
 varying vec2 ground_xz;
 varying vec4 weights_a;
@@ -80,12 +87,17 @@ const float EPS = 0.002;
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 const vec3 FLAT_NORMAL = vec3(0.5, 0.5, 1.0);
 
-// One layer, faded by `fade`: colour, mean colour (its last mip) and the
-// height score (weight + relief).
-void layer(sampler2D tex, float weight, float inv_tile, float fade, out vec3 color, out vec3 mean, out float score) {
+// One layer, faded by `fade`: colour, mean colour and the height score
+// (weight + relief). Fully faded: the mean alone, no texture read.
+void layer(sampler2D tex, float weight, float inv_tile, vec4 known_mean, float fade, out vec3 color, out vec3 mean, out float score) {
 	vec2 uv = ground_xz * inv_tile;
+	mean = known_mean.a > 0.5 ? known_mean.rgb : textureLod(tex, uv, 14.0).rgb;
+	if (fade >= 1.0) {
+		color = mean;
+		score = weight;
+		return;
+	}
 	vec3 c = texture(tex, uv).rgb;
-	mean = textureLod(tex, uv, 14.0).rgb;
 	color = mix(c, mean, fade);
 	score = weight + dot(c - mean, vec3(0.333)) * height_strength * (1.0 - fade);
 }
@@ -95,8 +107,14 @@ void layer(sampler2D tex, float weight, float inv_tile, float fade, out vec3 col
 void surface(sampler2D normal_tex, sampler2D rough_tex, int index, float fade, out vec3 normal, out float rough) {
 	float inv_tile = index < 4 ? inv_tile_a[index] : inv_tile_b[index - 4];
 	vec2 uv = ground_xz * inv_tile;
+	float rough_mean = textureLod(rough_tex, uv, 14.0).r;
+	if (fade >= 1.0) {
+		normal = FLAT_NORMAL;
+		rough = rough_mean;
+		return;
+	}
 	normal = mix(texture(normal_tex, uv).rgb, FLAT_NORMAL, fade);
-	rough = mix(texture(rough_tex, uv).r, textureLod(rough_tex, uv, 14.0).r, fade);
+	rough = mix(texture(rough_tex, uv).r, rough_mean, fade);
 }
 #endif
 
@@ -116,13 +134,13 @@ void fragment() {
 		n[i] = FLAT_NORMAL;
 		r[i] = 1.0;
 	}
-	if (w[0] > EPS) layer(layer_0, w[0], inv_tile_a.x, fade, c[0], m[0], s[0]);
-	if (w[1] > EPS) layer(layer_1, w[1], inv_tile_a.y, fade, c[1], m[1], s[1]);
-	if (w[2] > EPS) layer(layer_2, w[2], inv_tile_a.z, fade, c[2], m[2], s[2]);
-	if (w[3] > EPS) layer(layer_3, w[3], inv_tile_a.w, fade, c[3], m[3], s[3]);
-	if (w[4] > EPS) layer(layer_4, w[4], inv_tile_b.x, fade, c[4], m[4], s[4]);
-	if (w[5] > EPS) layer(layer_5, w[5], inv_tile_b.y, fade, c[5], m[5], s[5]);
-	if (w[6] > EPS) layer(layer_6, w[6], inv_tile_b.z, fade, c[6], m[6], s[6]);
+	if (w[0] > EPS) layer(layer_0, w[0], inv_tile_a.x, mean_color[0], fade, c[0], m[0], s[0]);
+	if (w[1] > EPS) layer(layer_1, w[1], inv_tile_a.y, mean_color[1], fade, c[1], m[1], s[1]);
+	if (w[2] > EPS) layer(layer_2, w[2], inv_tile_a.z, mean_color[2], fade, c[2], m[2], s[2]);
+	if (w[3] > EPS) layer(layer_3, w[3], inv_tile_a.w, mean_color[3], fade, c[3], m[3], s[3]);
+	if (w[4] > EPS) layer(layer_4, w[4], inv_tile_b.x, mean_color[4], fade, c[4], m[4], s[4]);
+	if (w[5] > EPS) layer(layer_5, w[5], inv_tile_b.y, mean_color[5], fade, c[5], m[5], s[5]);
+	if (w[6] > EPS) layer(layer_6, w[6], inv_tile_b.z, mean_color[6], fade, c[6], m[6], s[6]);
 #ifdef USE_PBR
 	vec3 pn;
 	float pr;

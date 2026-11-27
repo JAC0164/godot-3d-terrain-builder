@@ -56,6 +56,7 @@ func _print(label: String, terrain: Node3D) -> void:
 	builder.rebuild_collision(terrain, builder.get_feature_collision_faces(terrain))
 	var build_ms := Time.get_ticks_msec() - start
 	var hashes := {"ground": _hasher(), "details": _hasher(), "features": _hasher(), "collision": _hasher()}
+	var body_faces := PackedVector3Array()
 	var nodes := terrain.find_children("*", "", true, false)
 	nodes.sort_custom(func(a, b): return String(terrain.get_path_to(a)) < String(terrain.get_path_to(b)))
 	for node in nodes:
@@ -69,6 +70,10 @@ func _print(label: String, terrain: Node3D) -> void:
 			var category := "ground" if String(node.name).begins_with("Chunk_") or String(node.name) == Meta.GROUND_SHADOW_NAME else "features"
 			hashes[category].update(path)
 			_hash_mesh(hashes[category], node.mesh)
+		elif node is CollisionShape3D and node.get_parent().name == Meta.GENERATED_COLLISION_BODY_NAME:
+			# The ground body: hashed below, as the single shape its shapes
+			# replaced (one per chunk + roads / rivers since 2026-11-27).
+			pass
 		elif node is CollisionShape3D:
 			hashes["collision"].update(path)
 			var shape: Shape3D = node.shape
@@ -76,10 +81,26 @@ func _print(label: String, terrain: Node3D) -> void:
 				hashes["collision"].update(var_to_bytes((shape as ConcavePolygonShape3D).get_faces()))
 			elif shape != null:
 				hashes["collision"].update(var_to_bytes(shape.get_debug_mesh().surface_get_arrays(0)[Mesh.ARRAY_VERTEX]))
+	var body := terrain.get_node_or_null(Meta.GENERATED_COLLISION_BODY_NAME)
+	if body != null:
+		for shape_node in body.get_children():
+			if shape_node is CollisionShape3D and shape_node.name != TerrainBuilder.FEATURE_COLLISION_SHAPE_NAME:
+				body_faces.append_array(_shape_faces(shape_node))
+		var features := body.get_node_or_null(TerrainBuilder.FEATURE_COLLISION_SHAPE_NAME) as CollisionShape3D
+		if features != null:
+			body_faces.append_array(_shape_faces(features))
+	if not body_faces.is_empty():
+		hashes["collision"].update(("%s/%s" % [Meta.GENERATED_COLLISION_BODY_NAME, Meta.GENERATED_COLLISION_SHAPE_NAME]).to_utf8_buffer())
+		hashes["collision"].update(var_to_bytes(body_faces))
 	print("%-12s data %s ground %s details %s features %s collision %s (%d nodes, %d ms)" % [label,
 		data.finish().hex_encode().left(10), hashes["ground"].finish().hex_encode().left(10),
 		hashes["details"].finish().hex_encode().left(10), hashes["features"].finish().hex_encode().left(10),
 		hashes["collision"].finish().hex_encode().left(10), nodes.size(), build_ms])
+
+## Faces of a ground body shape (none when empty).
+static func _shape_faces(node: CollisionShape3D) -> PackedVector3Array:
+	var shape := node.shape as ConcavePolygonShape3D
+	return shape.get_faces() if shape != null else PackedVector3Array()
 
 ## `value` with every Object replaced by its file path (or class): var_to_bytes()
 ## writes an Object as its instance id, which changes from one run to the

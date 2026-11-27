@@ -21,7 +21,7 @@ timeout 120 "$G" --headless --path . --script res://tools/hash_details.gd 2>&1 |
 diff -q results/refactor/baseline_details.txt /tmp/lte_details.txt >/dev/null && echo "OK   fingerprint details" || { echo "FAIL fingerprint details"; fail=1; }
 timeout 120 "$G" --headless --path . --script res://tools/hash_details.gd -- --sliced 2>&1 | grep "instances" | grep -v savanna_128 | sed 's/ (.*//' > /tmp/lte_details_sliced.txt
 diff -q results/refactor/baseline_details.txt /tmp/lte_details_sliced.txt >/dev/null && echo "OK   fingerprint details sliced" || { echo "FAIL fingerprint details sliced"; fail=1; }
-for t in check_node_names check_ground_shadow check_maps check_biomes check_shading_seams check_optimizations check_waterholes check_road_fit check_river_level check_vegetation_paint check_click_props check_custom_model check_streaming check_threaded_chunks check_ground_streaming check_feature_cache check_feature_split check_heightmap_ground check_texture_blend check_environment check_theme_live check_look_migration check_pbr_ground; do
+for t in check_node_names check_ground_shadow check_maps check_biomes check_shading_seams check_optimizations check_waterholes check_road_fit check_river_level check_vegetation_paint check_click_props check_custom_model check_streaming check_threaded_chunks check_ground_streaming check_feature_cache check_feature_split check_heightmap_ground check_texture_blend check_environment check_theme_live check_look_migration check_pbr_ground check_editor_collision check_undo_area; do
 	# The ground streaming builds a 768 m map twice (~2 min).
 	limit=120; [ $t = check_ground_streaming ] && limit=360
 	out=$(timeout $limit "$G" --headless --path . --script res://tools/$t.gd 2>&1)
@@ -32,6 +32,13 @@ for t in check_node_names check_ground_shadow check_maps check_biomes check_shad
 		echo "OK   $t"
 	fi
 done
+# The ground shader draws the same picture (rendered off screen: needs a window).
+out=$(timeout 120 "$G" --path . --position -3000,-3000 --resolution 960x540 --script res://tools/check_splat_reads.gd 2>&1)
+if [ $? -ne 0 ] || echo "$out" | grep -qE "SHADER ERROR|SCRIPT ERROR|RESULT: FAIL"; then
+	echo "FAIL check_splat_reads"; echo "$out" | grep -E "ERROR|FAIL" | head -5; fail=1
+else
+	echo "OK   check_splat_reads"
+fi
 # Static typing: every GDScript typing warning of the addon must stay at 0.
 typing=$(timeout 300 bash tools/typecheck.sh checks | grep -o "^[0-9]*")
 [ "$typing" = "0" ] && echo "OK   typecheck" || { echo "FAIL typecheck ($typing issue(s), results/typecheck_checks.txt)"; fail=1; }

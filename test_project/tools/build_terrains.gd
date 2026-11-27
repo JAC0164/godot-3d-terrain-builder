@@ -252,10 +252,12 @@ func _geometry_stats(terrain: Node3D) -> Dictionary:
 			feature_triangles += feature_mesh.surface_get_array_len(i) / 3
 			materials[feature_mesh.surface_get_material(i).get_instance_id()] = true
 
-	var shape_node := terrain.get_node_or_null("%s/%s" % [Meta.GENERATED_COLLISION_BODY_NAME, Meta.GENERATED_COLLISION_SHAPE_NAME])
+	# One shape per chunk + roads / rivers.
 	var collision_triangles := 0
-	if shape_node and shape_node.shape:
-		collision_triangles = (shape_node.shape as ConcavePolygonShape3D).get_faces().size() / 3
+	var body := terrain.get_node_or_null(Meta.GENERATED_COLLISION_BODY_NAME)
+	for shape_node in body.get_children() if body else []:
+		if shape_node is CollisionShape3D and shape_node.shape is ConcavePolygonShape3D:
+			collision_triangles += (shape_node.shape as ConcavePolygonShape3D).get_faces().size() / 3
 
 	return {
 		"chunks": chunk_nodes,

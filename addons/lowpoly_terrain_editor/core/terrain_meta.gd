@@ -178,6 +178,8 @@ const RUNTIME_BUILD_NOTHING := 0   ## everything saved in the scene (default)
 const RUNTIME_BUILD_DETAILS := 1   ## details rebuilt when the scene loads
 const RUNTIME_BUILD_ALL := 2       ## meshes, collision and details rebuilt
 const GENERATED_COLLISION_BODY_NAME := "_GeneratedTerrainCollision"
+## The single whole-map shape of older scenes (now one per chunk, see
+## TerrainBuilder.rebuild_collision): removed at the next rebuild.
 const GENERATED_COLLISION_SHAPE_NAME := "_GeneratedTerrainCollisionShape"
 
 const TERRAIN_CHUNK_CELLS := 32

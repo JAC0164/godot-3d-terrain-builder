@@ -485,7 +485,13 @@ func _toolbar_redo() -> void:
 ## Registers an already-applied edit as an Undo/Redo action.
 ## `area` (see StrokeController.undo_handler): the part of the terrain the
 ## action changed, so Undo / Redo rebuild only that; null = everything.
+## The history keeps only what changed (TerrainSnapshot.delta_pair) when the
+## grid size did not change.
 func _register_snapshot_undo(action_name: String, terrain: Node3D, before: Dictionary, after: Dictionary, area: Variant = null) -> void:
+	var pair := TerrainSnapshot.delta_pair(before, after)
+	if not pair.is_empty():
+		before = pair[0]
+		after = pair[1]
 	var undo_redo := get_undo_redo()
 	undo_redo.create_action(action_name, UndoRedo.MERGE_DISABLE, terrain)
 	undo_redo.add_do_method(self, "_restore_snapshot", terrain, after, area)
