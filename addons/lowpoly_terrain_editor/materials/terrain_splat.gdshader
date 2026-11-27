@@ -8,7 +8,11 @@ shader_type spatial;
 // to the textured part), CUSTOM1.a = waterhole tint: the textures keep their
 // grain but take the colour of COLOR.rgb (dried clay basins).
 // The textures are projected from above (local X / Z), like the UVs of a
-// textured style: one repeat every `tile` metres.
+// textured style: one repeat every `tile` metres. A steep facet (its normal's
+// height under STEEP) is projected instead on the closest of 8 vertical
+// planes (every 45 degrees around it), so its texture is not stretched down
+// the slope. The facet comes from the screen derivatives of the position: one
+// projection per triangle (no seam inside a facet), still one read per layer.
 // Height blend: where weights overlap, each pixel shows the layer whose
 // weight plus local relief (texel brightness minus the texture's mean) is
 // highest, fading over `blend_depth`: pebbles and cracks poke through instead
@@ -24,8 +28,8 @@ shader_type spatial;
 // USE_PBR (MaterialFactory adds the define when a layer has a normal or
 // roughness map): up to 4 layers (`pbr_layer`: their index, -1 = none) also
 // read a normal + roughness map (7 + 8 = 15 texture slots, within the 16 of
-// phones), specular on. The normal maps use the projection from above
-// (tangent = local +X), no mesh tangents needed.
+// phones), specular on. The normal maps follow the same projection
+// (tangent = its U direction), no mesh tangents needed.
 // MaterialFactory swaps cull_back for cull_disabled (Double Sided).
 #ifdef USE_PBR
 render_mode diffuse_lambert, cull_back;
@@ -67,12 +71,14 @@ uniform float fade_end = 90.0;
 // Mean colour (linear rgb) of layers 0-6, a = 1 when known (unset = 0).
 uniform vec4 mean_color[7];
 
-varying vec2 ground_xz;
+varying vec3 ground_pos;
+varying vec3 ground_normal;
 varying vec4 weights_a;
 varying vec4 weights_b;
 
 void vertex() {
-	ground_xz = VERTEX.xz;
+	ground_pos = VERTEX;
+	ground_normal = NORMAL;
 	weights_a = CUSTOM0;
 	weights_b = CUSTOM1;
 }
@@ -86,11 +92,15 @@ vec3 to_linear(vec3 c) {
 const float EPS = 0.002;
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 const vec3 FLAT_NORMAL = vec3(0.5, 0.5, 1.0);
+// Facets whose normal's height is under this (slope over ~45 degrees) are
+// projected from the side. At 0.7 both projections stretch alike (~1.4x).
+const float STEEP = 0.7;
 
 // One layer, faded by `fade`: colour, mean colour and the height score
-// (weight + relief). Fully faded: the mean alone, no texture read.
-void layer(sampler2D tex, float weight, float inv_tile, vec4 known_mean, float fade, out vec3 color, out vec3 mean, out float score) {
-	vec2 uv = ground_xz * inv_tile;
+// (weight + relief). Fully faded: the mean alone, no texture read. `proj`:
+// the projected position (metres).
+void layer(sampler2D tex, vec2 proj, float weight, float inv_tile, vec4 known_mean, float fade, out vec3 color, out vec3 mean, out float score) {
+	vec2 uv = proj * inv_tile;
 	mean = known_mean.a > 0.5 ? known_mean.rgb : textureLod(tex, uv, 14.0).rgb;
 	if (fade >= 1.0) {
 		color = mean;
@@ -104,9 +114,9 @@ void layer(sampler2D tex, float weight, float inv_tile, vec4 known_mean, float f
 
 #ifdef USE_PBR
 // Normal (encoded 0-1) and roughness of layer `index`, flat / mean far away.
-void surface(sampler2D normal_tex, sampler2D rough_tex, int index, float fade, out vec3 normal, out float rough) {
+void surface(sampler2D normal_tex, sampler2D rough_tex, vec2 proj, int index, float fade, out vec3 normal, out float rough) {
 	float inv_tile = index < 4 ? inv_tile_a[index] : inv_tile_b[index - 4];
-	vec2 uv = ground_xz * inv_tile;
+	vec2 uv = proj * inv_tile;
 	float rough_mean = textureLod(rough_tex, uv, 14.0).r;
 	if (fade >= 1.0) {
 		normal = FLAT_NORMAL;
@@ -119,6 +129,22 @@ void surface(sampler2D normal_tex, sampler2D rough_tex, int index, float fade, o
 #endif
 
 void fragment() {
+	// The facet (exact per triangle), turned to the side of the mesh normal.
+	vec3 facet = normalize(cross(dFdx(ground_pos), dFdy(ground_pos)));
+	facet = dot(facet, ground_normal) < 0.0 ? -facet : facet;
+	// From above: U = local +X, V = local +Z. From the side: the vertical
+	// plane facing the closest 45-degree direction d, U along it (d turned a
+	// quarter, so U x V-up faces out), V downwards (the picture stays upright).
+	vec2 proj = ground_pos.xz;
+	vec3 proj_u = vec3(1.0, 0.0, 0.0);
+	vec3 proj_v = vec3(0.0, 0.0, 1.0);
+	if (facet.y < STEEP) {
+		float angle = round(atan(facet.z, facet.x) * (4.0 / PI)) * (PI / 4.0);
+		vec2 u = vec2(sin(angle), -cos(angle));
+		proj = vec2(dot(ground_pos.xz, u), -ground_pos.y);
+		proj_u = vec3(u.x, 0.0, u.y);
+		proj_v = vec3(0.0, -1.0, 0.0);
+	}
 	float fade = smoothstep(fade_start, fade_end, length(VERTEX));
 	float depth = mix(blend_depth, far_blend_depth, fade);
 	float w[7] = float[7](weights_a.x, weights_a.y, weights_a.z, weights_a.w, weights_b.x, weights_b.y, weights_b.z);
@@ -134,20 +160,20 @@ void fragment() {
 		n[i] = FLAT_NORMAL;
 		r[i] = 1.0;
 	}
-	if (w[0] > EPS) layer(layer_0, w[0], inv_tile_a.x, mean_color[0], fade, c[0], m[0], s[0]);
-	if (w[1] > EPS) layer(layer_1, w[1], inv_tile_a.y, mean_color[1], fade, c[1], m[1], s[1]);
-	if (w[2] > EPS) layer(layer_2, w[2], inv_tile_a.z, mean_color[2], fade, c[2], m[2], s[2]);
-	if (w[3] > EPS) layer(layer_3, w[3], inv_tile_a.w, mean_color[3], fade, c[3], m[3], s[3]);
-	if (w[4] > EPS) layer(layer_4, w[4], inv_tile_b.x, mean_color[4], fade, c[4], m[4], s[4]);
-	if (w[5] > EPS) layer(layer_5, w[5], inv_tile_b.y, mean_color[5], fade, c[5], m[5], s[5]);
-	if (w[6] > EPS) layer(layer_6, w[6], inv_tile_b.z, mean_color[6], fade, c[6], m[6], s[6]);
+	if (w[0] > EPS) layer(layer_0, proj, w[0], inv_tile_a.x, mean_color[0], fade, c[0], m[0], s[0]);
+	if (w[1] > EPS) layer(layer_1, proj, w[1], inv_tile_a.y, mean_color[1], fade, c[1], m[1], s[1]);
+	if (w[2] > EPS) layer(layer_2, proj, w[2], inv_tile_a.z, mean_color[2], fade, c[2], m[2], s[2]);
+	if (w[3] > EPS) layer(layer_3, proj, w[3], inv_tile_a.w, mean_color[3], fade, c[3], m[3], s[3]);
+	if (w[4] > EPS) layer(layer_4, proj, w[4], inv_tile_b.x, mean_color[4], fade, c[4], m[4], s[4]);
+	if (w[5] > EPS) layer(layer_5, proj, w[5], inv_tile_b.y, mean_color[5], fade, c[5], m[5], s[5]);
+	if (w[6] > EPS) layer(layer_6, proj, w[6], inv_tile_b.z, mean_color[6], fade, c[6], m[6], s[6]);
 #ifdef USE_PBR
 	vec3 pn;
 	float pr;
-	if (pbr_layer.x >= 0 && w[pbr_layer.x] > EPS) { surface(normal_0, rough_0, pbr_layer.x, fade, pn, pr); n[pbr_layer.x] = pn; r[pbr_layer.x] = pr; }
-	if (pbr_layer.y >= 0 && w[pbr_layer.y] > EPS) { surface(normal_1, rough_1, pbr_layer.y, fade, pn, pr); n[pbr_layer.y] = pn; r[pbr_layer.y] = pr; }
-	if (pbr_layer.z >= 0 && w[pbr_layer.z] > EPS) { surface(normal_2, rough_2, pbr_layer.z, fade, pn, pr); n[pbr_layer.z] = pn; r[pbr_layer.z] = pr; }
-	if (pbr_layer.w >= 0 && w[pbr_layer.w] > EPS) { surface(normal_3, rough_3, pbr_layer.w, fade, pn, pr); n[pbr_layer.w] = pn; r[pbr_layer.w] = pr; }
+	if (pbr_layer.x >= 0 && w[pbr_layer.x] > EPS) { surface(normal_0, rough_0, proj, pbr_layer.x, fade, pn, pr); n[pbr_layer.x] = pn; r[pbr_layer.x] = pr; }
+	if (pbr_layer.y >= 0 && w[pbr_layer.y] > EPS) { surface(normal_1, rough_1, proj, pbr_layer.y, fade, pn, pr); n[pbr_layer.y] = pn; r[pbr_layer.y] = pr; }
+	if (pbr_layer.z >= 0 && w[pbr_layer.z] > EPS) { surface(normal_2, rough_2, proj, pbr_layer.z, fade, pn, pr); n[pbr_layer.z] = pn; r[pbr_layer.z] = pr; }
+	if (pbr_layer.w >= 0 && w[pbr_layer.w] > EPS) { surface(normal_3, rough_3, proj, pbr_layer.w, fade, pn, pr); n[pbr_layer.w] = pn; r[pbr_layer.w] = pr; }
 #endif
 	// The untextured (colour) part blends like a flat layer.
 	float textured_weight = dot(weights_a, vec4(1.0)) + dot(weights_b.xyz, vec3(1.0));
@@ -186,10 +212,9 @@ void fragment() {
 	float total = max(tex_total + plain_b, 0.0001);
 	ALBEDO = albedo / total;
 #ifdef USE_PBR
-	// Projection from above: U along local +X, V along local +Z (Godot's
-	// binormal points to -V).
-	TANGENT = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(1.0, 0.0, 0.0, 0.0))).xyz);
-	BINORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(0.0, 0.0, -1.0, 0.0))).xyz);
+	// The projection's U and V (Godot's binormal points to -V).
+	TANGENT = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(proj_u, 0.0))).xyz);
+	BINORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(-proj_v, 0.0))).xyz);
 	NORMAL_MAP = (normal_sum + FLAT_NORMAL * plain_b) / total;
 	NORMAL_MAP_DEPTH = normal_strength;
 	ROUGHNESS = (rough_sum + plain_b) / total;

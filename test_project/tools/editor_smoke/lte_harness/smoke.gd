@@ -832,6 +832,8 @@ func _run() -> void:
 		var out := {"plants": 0, "others": 0}
 		for node in terrain.find_children("_Details*", "MultiMeshInstance3D", true, false):
 			var n := String(node.name)
+			if n == "_Details_Far":
+				continue # the far half of a grass layer (a copy)
 			var c: int = node.multimesh.visible_instance_count if node.multimesh.visible_instance_count >= 0 else node.multimesh.instance_count
 			var plant := n.contains("Grass") or n.contains("Shrubs") or n.contains("Acacias") or n.contains("Baobabs") or n.contains("DeadTrees") or n.contains("Reeds")
 			out["plants" if plant else "others"] += c

@@ -17,6 +17,7 @@ const TerrainData = preload(ADDON + "core/terrain_data.gd")
 const MapGenerator = preload(ADDON + "generation/map_generator.gd")
 const FeatureStyle = preload(ADDON + "styles/feature_style.gd")
 const TerrainBuilder = preload(ADDON + "mesh/terrain_builder.gd")
+const DetailScatter = preload(ADDON + "mesh/detail_scatter.gd")
 const TestTerrain = preload("res://tools/test_terrain.gd")
 const RECIPE := ADDON + "generation/presets/senegal_savanna_map.tres"
 
@@ -61,6 +62,10 @@ func _print(label: String, terrain: Node3D) -> void:
 	nodes.sort_custom(func(a, b): return String(terrain.get_path_to(a)) < String(terrain.get_path_to(b)))
 	for node in nodes:
 		var path := String(terrain.get_path_to(node)).to_utf8_buffer()
+		if node is MultiMeshInstance3D and node.name == DetailScatter.FAR_NAME:
+			# The far half of a dense layer (check_far_thinning): a copy of
+			# every other instance, the full set is hashed.
+			continue
 		if node is MultiMeshInstance3D:
 			var multimesh: MultiMesh = node.multimesh
 			hashes["details"].update(path)

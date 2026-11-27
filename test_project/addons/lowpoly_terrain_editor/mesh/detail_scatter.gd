@@ -35,6 +35,16 @@ const ENTRY_COUNT := 1
 const ENTRY_BUFFER := 2
 const ENTRY_LAYER := 3
 const ENTRY_MESH := 4
+## Dense layers (Density from THIN_DENSITY per cell: the grass) keep one
+## instance in two beyond THIN_FROM of their draw distance: a child FAR_NAME
+## holds that half and takes over there (visibility_range_begin), the layer's
+## node stops there. Nothing transparent, no setting: half the grass far
+## away, where it is a few pixels.
+const THIN_DENSITY := 0.4
+const THIN_FROM := 0.45
+const FAR_NAME := NODE_PREFIX + "_Far"
+## Floats per instance in the buffer: 3 x 4 transform + colour.
+const _STRIDE := 16
 # DetailLayer.GroundFilter / ColorMode values as plain constants (cheaper in
 # the per-cell loop than enum lookups through the preloaded script).
 const _FILTER_GREENISH := 1
@@ -652,20 +662,43 @@ static func apply(terrain: Node3D, chunk: Node3D, entries: Array, add_child: Cal
 			node.name = name
 			add_child.call(chunk, node)
 		var distance: float = layer.draw_distance if layer.draw_distance >= 0.0 else default_distance
+		var thin := distance > 0.0 and layer.density >= THIN_DENSITY and count >= 2
+		var near_end := distance * THIN_FROM if thin else distance
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if layer.cast_shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-		node.visibility_range_end = distance
-		node.visibility_range_end_margin = distance * 0.05 if distance > 0.0 else 0.0
+		node.visibility_range_end = near_end
+		# No margin where the far half takes over: both switch at once.
+		node.visibility_range_end_margin = distance * 0.05 if distance > 0.0 and not thin else 0.0
 		var material := layer_material(layer, terrain)
-		var multimesh := MultiMesh.new()
-		multimesh.transform_format = MultiMesh.TRANSFORM_3D
-		multimesh.use_colors = true
 		var entry_mesh: Mesh = entry[ENTRY_MESH]
-		multimesh.mesh = _mesh_for(layer, material, entry_mesh)
-		multimesh.instance_count = count
-		multimesh.buffer = entry[ENTRY_BUFFER]
-		node.multimesh = multimesh
+		var mesh := _mesh_for(layer, material, entry_mesh)
+		var buffer: PackedFloat32Array = entry[ENTRY_BUFFER]
+		node.multimesh = _multimesh(mesh, count, buffer)
 		node.material_override = material
+		var far := node.get_node_or_null(FAR_NAME) as MultiMeshInstance3D
+		if thin:
+			if far == null:
+				far = MultiMeshInstance3D.new()
+				far.name = FAR_NAME
+				add_child.call(node, far)
+			far.cast_shadow = node.cast_shadow
+			far.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+			far.visibility_range_begin = near_end
+			far.visibility_range_end = distance
+			far.visibility_range_end_margin = distance * 0.05
+			# One instance in two (every other one in the buffer: the cells
+			# are in order, so it thins evenly). Same box as the full set: the
+			# switch distance is measured from the same centre.
+			var half_count := (count + 1) / 2
+			var half := PackedFloat32Array()
+			for i in half_count:
+				half.append_array(buffer.slice(2 * i * _STRIDE, (2 * i + 1) * _STRIDE))
+			far.multimesh = _multimesh(mesh, half_count, half)
+			far.custom_aabb = node.multimesh.get_aabb()
+			far.material_override = material
+		elif far != null:
+			node.remove_child(far)
+			far.queue_free()
 	for child in chunk.get_children():
 		var child_name := String(child.name)
 		if not child_name.begins_with(NODE_PREFIX) or keep.has(child_name):
@@ -674,6 +707,15 @@ static func apply(terrain: Node3D, chunk: Node3D, entries: Array, add_child: Cal
 			continue
 		chunk.remove_child(child)
 		child.queue_free()
+
+static func _multimesh(mesh: Mesh, count: int, buffer: PackedFloat32Array) -> MultiMesh:
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_colors = true
+	multimesh.mesh = mesh
+	multimesh.instance_count = count
+	multimesh.buffer = buffer
+	return multimesh
 
 ## Material of a layer's detail nodes. Built-in plants (grass, shrubs, trees)
 ## get the wind material of their kind, rigid meshes (rocks, mounds, bones)
