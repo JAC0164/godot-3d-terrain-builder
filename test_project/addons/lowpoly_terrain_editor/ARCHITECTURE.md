@@ -583,8 +583,13 @@ ui/
   min(ground, level) - Surface Drop. The carve therefore depends on the
   heights along the river: a sculpt stroke near one (`any_river_near`)
   re-carves at its end, and `rebuild_river_carve()` returns the chunks whose
-  carve changed (rebuilt too, also by `rebuild_area` for Undo). Checked by
-  `test_project/tools/check_river_level.gd` and the smoke test.
+  carve changed (rebuilt too, also by `rebuild_area` for Undo). "Near" is
+  measured to each segment of the centre line (Liang-Barsky against the
+  edit's rectangle grown by the bank reach + one cell), not to the river's
+  bounding box, which covers most of a 1 024 map: an edit away from the water
+  skips the ~105 ms carve. Checked by `test_project/tools/check_river_level.gd`,
+  `check_river_near.gd` (an edit called far never changes the carve) and
+  the smoke test.
 
 - Textured ground (`materials/terrain_splat.gdshader`, top faces of the
   blended textured styles only; cliffs keep their own UVs). Each layer's mean
@@ -624,8 +629,12 @@ ui/
   `hash_everything.gd`, the smoke test). Checked by `check_far_thinning.gd`.
 - Game API (`LowpolyTerrainRuntime`, no Inspector setting): get_height /
   get_normal / get_ground_style(_name) / is_on_terrain / get_height_range /
-  get_intersection answer from a `LowpolyTerrainQuery`: a copy of the drawn
-  surface (heights - carve + top offset), cells and styles, with the
+  get_intersection answer from a `LowpolyTerrainQuery`: copies of the
+  heights, cells and styles (`duplicate()`: Godot copies the memory only when
+  the terrain next writes, so making one is ~0.1 ms even on a 1 024 map) and
+  the builder's river carve, shared (only ever replaced, never written), the
+  drawn height = height - carve + top offset worked out per answer; the height
+  range is found on the first `get_height_range()`. With the
   terrain's global transform (moved, turned around Y, scaled; not tilted).
   Each cell is split along its (0,0)-(1,1) diagonal like the mesher, so the
   answers match the drawn triangles; NAN outside the map and over empty
@@ -636,7 +645,10 @@ ui/
   raise_area / flatten_area / paint_style change the data and grow a
   pending rectangle; `commit_edits()` rebuilds what it touched (chunks,
   their collision, details and trunk collision, roads / rivers, waterholes,
-  far blocks) and emits `terrain_changed(rect)`. `export_edits()` = the
+  far blocks) and emits `terrain_changed(rect)`. Roads and rivers are made
+  again on worker threads (`_start_edit_roads`: cut by chunk with
+  stream_ground, one mesh on a ground built whole) and put in place a few
+  frames later; `is_streaming_idle` is false meanwhile. `export_edits()` = the
   rectangles of the grids that differ from the data at load (or after the
   generated map), zstd-packed with a "LTE1" header; `import_edits()` puts
   them back and commits. Checked by `check_runtime_edits.gd`.

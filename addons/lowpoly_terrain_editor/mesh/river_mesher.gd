@@ -125,21 +125,58 @@ static func compute_carve(terrain: Node3D) -> PackedFloat32Array:
 
 ## True if a river's channel or cut banks may reach `rect` (terrain-local
 ## X/Z): heights changed there can change that river's carve and level.
+## Tested against each segment of the centre line (the bed follows it), not
+## the river's bounding box: on a big map a winding river's box covers most
+## of it, and every edit would recompute every river.
 static func any_river_near(terrain: Node3D, rect: Rect2) -> bool:
+	var resolution: int = Meta.get_int(terrain, Meta.RESOLUTION, Meta.DEFAULT_RESOLUTION)
+	var world_size: float = Meta.get_float(terrain, Meta.WORLD_SIZE, Meta.DEFAULT_WORLD_SIZE)
+	# One cell more: the ground under a centre line point is read from the
+	# grid vertices around it.
+	var spacing := world_size / maxf(float(resolution - 1), 1.0)
 	for river_variant: Variant in terrain.get_meta(Meta.RIVERS, []):
 		var river: Dictionary = river_variant
 		var points: Array = river.get("points", [])
 		if points.is_empty():
 			continue
+		var river_width: float = river.get("width", Meta.DEFAULT_RIVER_WIDTH)
+		var area := rect.grow(river_width * 0.5 + MAX_BANK_REACH + 1.0 + spacing)
 		var first_point: Vector2 = points[0]
 		var bounds := Rect2(first_point, Vector2.ZERO)
 		for point: Vector2 in points:
 			bounds = bounds.expand(point)
-		var river_width: float = river.get("width", Meta.DEFAULT_RIVER_WIDTH)
-		var reach := river_width * 0.5 + MAX_BANK_REACH + 1.0
-		if bounds.grow(reach).intersects(rect, true):
+		if not bounds.intersects(area, true):
+			continue
+		if points.size() == 1 and area.has_point(first_point):
 			return true
+		for i in points.size() - 1:
+			var a: Vector2 = points[i]
+			var b: Vector2 = points[i + 1]
+			if _segment_touches(a, b, area):
+				return true
 	return false
+
+## True if the segment a-b has a point inside (or on) `area` (Liang-Barsky).
+static func _segment_touches(a: Vector2, b: Vector2, area: Rect2) -> bool:
+	var d := b - a
+	var t0 := 0.0
+	var t1 := 1.0
+	for axis in 2:
+		var start := a[axis]
+		var delta := d[axis]
+		var low := area.position[axis]
+		var high := area.end[axis]
+		if absf(delta) < 0.000001:
+			if start < low or start > high:
+				return false
+			continue
+		var ta := (low - start) / delta
+		var tb := (high - start) / delta
+		t0 = maxf(t0, minf(ta, tb))
+		t1 = minf(t1, maxf(ta, tb))
+		if t0 > t1:
+			return false
+	return true
 
 ## Groups rivers into connected networks: two rivers are in the same network
 ## when their rasterized beds touch. Each group holds the rivers as stored, in

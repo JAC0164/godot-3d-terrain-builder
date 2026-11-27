@@ -9,6 +9,8 @@ extends RefCounted
 ## Made from a copy of the terrain data (LowpolyTerrainRuntime.get_query()):
 ## once made it never touches the scene, so it can be used from a worker
 ## thread. It does not follow later edits: ask the runtime for a new one.
+## The copy is a plain memory copy of the arrays (a few ms on a 1 024 map),
+## the river carve is applied when asked.
 ## Outside the map or over an empty cell, heights are NAN (is_nan()).
 ##
 ## The terrain may be moved, turned around Y and scaled; not tilted.
@@ -19,8 +21,12 @@ var _resolution := 0
 var _world_size := 0.0
 var _spacing := 1.0
 var _half := 0.0
-## Drawn height of each grid vertex (sculpted - river carve + top offset).
-var _surface := PackedFloat32Array()
+## Sculpted level of each grid vertex (drawn height = level - carve + top offset).
+var _heights := PackedFloat32Array()
+## River / waterhole carve per vertex, empty = none (_carved false).
+var _carve := PackedFloat32Array()
+var _carved := false
+var _top_offset := 0.0
 ## Cell flags (1 = ground), empty = every cell.
 var _active := PackedByteArray()
 var _styles := PackedInt32Array()
@@ -30,6 +36,9 @@ var _transform := Transform3D.IDENTITY
 var _inverse := Transform3D.IDENTITY
 var _normal_basis := Basis.IDENTITY
 var _local_range := Vector2.ZERO
+## _local_range is found on the first get_height_range() (a pass over every
+## vertex: not paid by games that never ask).
+var _range_ready := false
 
 ## A query over `terrain`'s current data. `carve`: the river / waterhole
 ## carve (TerrainBuilder.get_river_carve), empty = none.
@@ -39,19 +48,14 @@ static func from_terrain(terrain: Node3D, carve: PackedFloat32Array = PackedFloa
 	query._world_size = Meta.get_float(terrain, Meta.WORLD_SIZE, Meta.DEFAULT_WORLD_SIZE)
 	query._spacing = query._world_size / float(maxi(query._resolution - 1, 1))
 	query._half = query._world_size * 0.5
+	# duplicate(): packed arrays are shared by reference and the edits write
+	# into the terrain's ones. The carve is not copied: TerrainBuilder only
+	# ever replaces its cached carve with a new array, never writes into it.
 	var heights: PackedFloat32Array = terrain.get_meta(Meta.HEIGHTS, PackedFloat32Array())
-	var surface := heights.duplicate()
-	var top_offset := Meta.get_float(terrain, Meta.TOP_Y_OFFSET, 0.0)
-	var carved := carve.size() == surface.size()
-	var low := INF
-	var high := -INF
-	for i in surface.size():
-		var h := surface[i] + top_offset - (carve[i] if carved else 0.0)
-		surface[i] = h
-		low = minf(low, h)
-		high = maxf(high, h)
-	query._surface = surface
-	query._local_range = Vector2(low, high) if not surface.is_empty() else Vector2(NAN, NAN)
+	query._heights = heights.duplicate()
+	query._top_offset = Meta.get_float(terrain, Meta.TOP_Y_OFFSET, 0.0)
+	query._carved = carve.size() == query._heights.size() and not carve.is_empty()
+	query._carve = carve if query._carved else PackedFloat32Array()
 	var active: PackedByteArray = terrain.get_meta(Meta.CELL_ACTIVE, PackedByteArray())
 	query._active = active.duplicate()
 	var styles: PackedInt32Array = terrain.get_meta(Meta.CELL_STYLES, PackedInt32Array())
@@ -128,11 +132,26 @@ func get_ground_style_name(global_position: Vector3) -> StringName:
 
 ## Lowest and highest global Y of the ground grid (x, y).
 func get_height_range() -> Vector2:
+	if not _range_ready:
+		_find_range()
 	if is_nan(_local_range.x):
 		return _local_range
 	var low := (_transform * Vector3(0.0, _local_range.x, 0.0)).y
 	var high := (_transform * Vector3(0.0, _local_range.y, 0.0)).y
 	return Vector2(minf(low, high), maxf(low, high))
+
+func _find_range() -> void:
+	_range_ready = true
+	if _heights.is_empty():
+		_local_range = Vector2(NAN, NAN)
+		return
+	var low := INF
+	var high := -INF
+	for i in _heights.size():
+		var h := _heights[i] - (_carve[i] if _carved else 0.0)
+		low = minf(low, h)
+		high = maxf(high, h)
+	_local_range = Vector2(low + _top_offset, high + _top_offset)
 
 ## First point where the ray from `from` along `direction` goes down through
 ## the ground, within `max_distance` m; Vector3(NAN, NAN, NAN) when it does
@@ -203,13 +222,20 @@ func _local_height(x: float, z: float) -> float:
 	var tx := clampf((x + _half) / _spacing - float(x0), 0.0, 1.0)
 	var tz := clampf((z + _half) / _spacing - float(z0), 0.0, 1.0)
 	var row := z0 * _resolution + x0
-	var h00 := _surface[row]
-	var h11 := _surface[row + _resolution + 1]
+	var i11 := row + _resolution + 1
+	var i_mid := row + 1 if tx >= tz else row + _resolution
+	var h00 := _heights[row]
+	var h11 := _heights[i11]
+	var h_mid := _heights[i_mid]
+	if _carved:
+		h00 -= _carve[row]
+		h11 -= _carve[i11]
+		h_mid -= _carve[i_mid]
 	if tx >= tz:
-		var h10 := _surface[row + 1]
-		return h00 + tx * (h10 - h00) + tz * (h11 - h10)
-	var h01 := _surface[row + _resolution]
-	return h00 + tz * (h01 - h00) + tx * (h11 - h01)
+		return h00 + tx * (h_mid - h00) + tz * (h11 - h_mid) + _top_offset
+	return h00 + tz * (h_mid - h00) + tx * (h11 - h_mid) + _top_offset
 
 func _vertex(x: int, z: int) -> Vector3:
-	return Vector3(float(x) * _spacing - _half, _surface[z * _resolution + x], float(z) * _spacing - _half)
+	var i := z * _resolution + x
+	var h := _heights[i] - (_carve[i] if _carved else 0.0) + _top_offset
+	return Vector3(float(x) * _spacing - _half, h, float(z) * _spacing - _half)

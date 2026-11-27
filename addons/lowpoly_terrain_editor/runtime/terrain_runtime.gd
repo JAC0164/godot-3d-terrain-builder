@@ -175,7 +175,8 @@ signal terrain_changed(rect: Rect2)
 var used_seed := 0
 var is_ground_ready := false
 var is_finished := false
-## stream_details: nothing left to build or free around the focus.
+## stream_details: nothing left to build or free around the focus; also
+## false while an edit's roads / rivers are being made again (commit_edits).
 var is_streaming_idle := true
 
 var _builder: TerrainBuilder
@@ -645,19 +646,21 @@ func _rebuild_whole_edits(t: Node3D, keys: Array[Vector2i], rect: Rect2, roads: 
 				_collided[c] = -2
 		elif trunks:
 			_build_chunk_collision(c.x, c.y)
-	var feature_faces := PackedVector3Array()
-	if roads:
-		feature_faces = _builder.rebuild_feature_mesh(t, rect)
 	_builder.rebuild_waterholes(t, rect)
 	var body := t.get_node_or_null(GROUND_COLLISION_NAME) as StaticBody3D
 	if body != null:
 		for c in keys:
 			_replace_ground_shape(body, c, _chunk_faces(c.x, c.y))
-		if roads:
-			_replace_ground_shape(body, FEATURE_OWNER, feature_faces)
 	elif t.has_node(Meta.GENERATED_COLLISION_BODY_NAME):
-		# The editor's body, saved with the scene: its edited chunk shapes.
-		_builder.rebuild_collision(t, feature_faces if roads else _saved_feature_faces(t))
+		# The editor's body, saved with the scene: its edited chunk shapes
+		# (the roads' shape is replaced when their new mesh is in).
+		_builder.rebuild_collision(t, _saved_feature_faces(t))
+	if roads:
+		# The whole road network made again takes ~70-90 ms on a laptop:
+		# on worker threads, put in place a few frames later (_step_edit_roads).
+		_start_edit_roads()
+		is_streaming_idle = false
+		set_process(true)
 
 ## stream_ground: the built chunks are made again on the worker threads and
 ## swapped in when ready (_finish_ground), the others will be built from the
@@ -695,16 +698,17 @@ func _saved_feature_faces(t: Node3D) -> PackedVector3Array:
 	var shape := node.shape as ConcavePolygonShape3D if node != null else null
 	return shape.get_faces() if shape != null else PackedVector3Array()
 
-## stream_ground (game): the roads and rivers cut by chunk again, on worker
-## threads (_step_edit_roads puts the changed pieces in place).
+## After an edit, the roads and rivers made again on worker threads:
+## stream_ground (game) cuts them by chunk, a ground built whole keeps one
+## mesh (_step_edit_roads puts the result in place).
 func _start_edit_roads() -> void:
 	if not _edit_roads.is_empty():
 		# One at a time: the next one starts from the data then.
 		_edit_roads["again"] = true
 		return
-	var job := _builder.start_feature_mesh_threaded(_terrain, true)
+	var job := _builder.start_feature_mesh_threaded(_terrain, _split_features)
 	_feature_jobs.append(job)
-	_edit_roads = {"job": job}
+	_edit_roads = {"job": job, "split": _split_features}
 
 func _step_edit_roads() -> void:
 	var job: Dictionary = _edit_roads["job"]
@@ -712,7 +716,19 @@ func _step_edit_roads() -> void:
 		return
 	_feature_jobs.erase(job)
 	var again: bool = _edit_roads.get("again", false)
+	var split: bool = _edit_roads.get("split", true)
 	_edit_roads = {}
+	if not split:
+		# Ground built whole: one road mesh and one collision shape.
+		var faces := _builder.finish_feature_mesh(_terrain, job)
+		var body := _terrain.get_node_or_null(GROUND_COLLISION_NAME) as StaticBody3D
+		if body != null:
+			_replace_ground_shape(body, FEATURE_OWNER, faces)
+		elif _terrain.has_node(Meta.GENERATED_COLLISION_BODY_NAME):
+			_builder.rebuild_collision(_terrain, faces)
+		if again:
+			_start_edit_roads()
+		return
 	var old_pieces := _road_pieces
 	var old_faces := _road_faces
 	_road_pieces = {}
@@ -898,6 +914,13 @@ func _process(delta: float) -> void:
 		_run(_build_budget_ms())
 	elif _streaming:
 		_stream(delta)
+	if is_finished and not _ground_streaming and not _edit_roads.is_empty():
+		# Ground built whole: an edit's roads / rivers come from worker
+		# threads (_start_edit_roads); _stream only steps them when streamed.
+		_step_edit_roads()
+		if _edit_roads.is_empty() and not _streaming:
+			is_streaming_idle = true
+			set_process(false)
 
 func _run(budget_ms: float) -> void:
 	var start := Time.get_ticks_usec()
@@ -1090,7 +1113,7 @@ func _stream(delta: float) -> void:
 		# The next chunk starts with its ground colours (~7 ms on a laptop in
 		# one go): not in the frame that just made this one's MultiMeshes.
 		break
-	is_streaming_idle = ground_idle and _stream_queue.is_empty() and _stream_job.is_empty()
+	is_streaming_idle = ground_idle and _stream_queue.is_empty() and _stream_job.is_empty() and _edit_roads.is_empty()
 
 ## Frees the layers past their distance and queues the missing ones, nearest
 ## chunk first.
