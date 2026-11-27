@@ -17,6 +17,11 @@ mkdir -p $T/addons
 cp $HERE/tools/typecheck/project.godot.txt $T/project.godot
 rm -rf $T/addons/lowpoly_terrain_editor
 cp -r $HERE/../addons/lowpoly_terrain_editor $T/addons/
+# Re-import when a class_name of the addon is not in the class cache yet.
+CACHE=$T/.godot/global_script_class_cache.cfg
+for c in $(grep -rhoE "^class_name [A-Za-z0-9_]+" $T/addons/lowpoly_terrain_editor --include=*.gd | cut -d' ' -f2); do
+	grep -q "&\"$c\"" $CACHE 2>/dev/null || { rm -rf $T/.godot; break; }
+done
 [ -d $T/.godot ] || timeout 90 $G --headless --path $T --import >/dev/null 2>&1
 : > $OUT
 cd $T/addons/lowpoly_terrain_editor

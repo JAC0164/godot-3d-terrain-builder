@@ -278,6 +278,9 @@ func _build_game_section(panel: VBoxContainer, terrain: Node3D) -> void:
 		Meta.get_bool(terrain, Meta.ROAD_COLLISION, true), _plain_setter(terrain, Meta.ROAD_COLLISION))
 	_add_checkbox(section, "Water Surface Collision", "Characters walk on the water surface of the rivers drawn next instead of their bed. Off for most games.",
 		Meta.get_bool(terrain, Meta.RIVER_COLLISION, false), _plain_setter(terrain, Meta.RIVER_COLLISION))
+	_add_button(section, "Bake Navigation",
+		"Make the navigation mesh of the walkable ground for NavigationAgent3D: a NavigationRegion3D child named Navigation (added the first time). Empty cells, cliffs and river beds are left out; trunks with collision are obstacles. Bake again after editing the ground; in game, LowpolyTerrainRuntime.bake_navigation() rebakes around the player.",
+		func() -> void: host.bake_navigation(terrain))
 
 	var row := _add_row(section, "Runtime Build", "")
 	var option := OptionButton.new()

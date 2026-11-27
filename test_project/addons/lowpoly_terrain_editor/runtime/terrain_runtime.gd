@@ -58,6 +58,10 @@ const FeatureMesher = preload("../mesh/feature_mesher.gd")
 const MeshUtils = preload("../mesh/mesh_utils.gd")
 const TerrainStorage = preload("../core/terrain_storage.gd")
 const TerrainShading = preload("../mesh/terrain_shading.gd")
+const TerrainNavigation = preload("../navigation/terrain_navigation.gd")
+const TerrainEdits = preload("terrain_edits.gd")
+const RiverMesher = preload("../mesh/river_mesher.gd")
+const FeatureEraser = preload("../editing/feature_eraser.gd")
 
 ## Ground collision built in game: one concave shape per chunk (shape owners
 ## of one StaticBody3D), so no single build step stalls a frame.
@@ -74,6 +78,8 @@ const FAR_GROUND_NAME := "_FarGround"
 ## Ground colours kept for the details (when the ground is not built here):
 ## the last chunks whose details were built, for their next layers.
 const SHADING_CACHE_SIZE := 12
+## Key of the roads / rivers shape owner in _ground_owners.
+const FEATURE_OWNER := Vector2i(-1, -1)
 
 ## Ground + ground collision are built: safe to spawn the player.
 signal terrain_ready
@@ -85,6 +91,9 @@ signal finished(stats: Dictionary)
 ## stream_details: the detail layers (or trunk collision) of a chunk were
 ## built or freed.
 signal chunk_details_changed(chunk_x: int, chunk_z: int)
+## commit_edits() / import_edits() rebuilt the ground in `rect` (terrain-local
+## X / Z): get_height() & co answer from the new ground now.
+signal terrain_changed(rect: Rect2)
 
 ## Terrain to build. Empty = the parent node.
 @export var terrain: Node3D
@@ -272,6 +281,26 @@ var _shared_builder: TerrainBuilder = null
 var _stale: Dictionary = {}
 ## Chunks whose collision shape no longer matches their mesh (edits).
 var _shape_dirty: Dictionary = {}
+## Answers of get_height() & co (null = made again from the data at the next
+## question).
+var _query: LowpolyTerrainQuery = null
+
+# Edits made in game (set_height & co, commit_edits).
+## Area (terrain-local X / Z) of the edits not committed yet.
+var _edit_rect := Rect2()
+var _has_edits := false
+## The heights and cell styles before the first edit (TerrainEdits.base_of),
+## what export_edits() compares with.
+var _edit_base: Dictionary = {}
+## Shape owner of each chunk (and FEATURE_OWNER) on the GROUND_COLLISION_NAME
+## body: an edit replaces only its chunks' shapes.
+var _ground_owners: Dictionary = {}
+## stream_details: layers (bit mask) of a chunk made again after an edit.
+var _redo: Dictionary = {}
+## stream_ground: built chunks to make again (edited).
+var _rebuild: Dictionary = {}
+## stream_ground: roads / rivers cut again after an edit ({job, keys}).
+var _edit_roads: Dictionary = {}
 
 ## The terrain data is packed in the scene file (core/terrain_storage.gd):
 ## decode it before anything reads it, editor and game alike.
@@ -335,6 +364,7 @@ func build(new_seed: int = -1) -> bool:
 	if generate_map and recipe != null and not _editor_stream:
 		used_seed = new_seed if new_seed >= 0 else (randi() & 0x7FFFFFFF if random_seed else map_seed)
 		_map_stats = MapGenerator.generate(_terrain, recipe, used_seed)
+		_edit_base = {}
 		_clear_generated(_terrain)
 		rebuild_ground = true
 	else:
@@ -373,8 +403,366 @@ func build(new_seed: int = -1) -> bool:
 		_run(INF)
 	return true
 
+# -----------------------------------------------------------------------------
+# Questions about the ground (no physics needed, same answers as the drawn
+# triangles; see LowpolyTerrainQuery). Positions are global; NAN outside the
+# map or over an empty cell.
+# -----------------------------------------------------------------------------
+
+## Global Y of the ground under `global_position` (X / Z), NAN without ground.
+func get_height(global_position: Vector3) -> float:
+	return _current_query().get_height(global_position)
+
+## Normal of the ground facet under `global_position` (NAN without ground).
+func get_normal(global_position: Vector3) -> Vector3:
+	return _current_query().get_normal(global_position)
+
+## Palette style id painted under `global_position`, -1 without ground.
+func get_ground_style(global_position: Vector3) -> int:
+	return _current_query().get_ground_style(global_position)
+
+## Biome ground style name under `global_position` (e.g. &"Grass"), &"" without
+## ground or for a custom style: footstep sounds, speed, effects.
+func get_ground_style_name(global_position: Vector3) -> StringName:
+	return _current_query().get_ground_style_name(global_position)
+
+## True when there is ground under `global_position`.
+func is_on_terrain(global_position: Vector3) -> bool:
+	return _current_query().is_on_terrain(global_position)
+
+## Lowest and highest global Y of the ground.
+func get_height_range() -> Vector2:
+	return _current_query().get_height_range()
+
+## Where a ray first goes down through the ground (no physics, also on
+## chunks without collision), Vector3(NAN, NAN, NAN) when it does not.
+func get_intersection(from: Vector3, direction: Vector3, max_distance: float = 1000.0) -> Vector3:
+	return _current_query().get_intersection(from, direction, max_distance)
+
+## A copy of the ground data to ask from a worker thread (it does not follow
+## later edits: ask again after terrain_changed).
+func get_query() -> LowpolyTerrainQuery:
+	var t := _target()
+	if t == null or not Meta.is_terrain(t):
+		return LowpolyTerrainQuery.new()
+	return LowpolyTerrainQuery.from_terrain(t, _query_carve(t))
+
+## Bakes the navigation mesh of the walkable ground (TerrainNavigation) into
+## `region` (null = the terrain's "Navigation" child, made when missing), on
+## a worker thread; `on_done` is called once the new mesh is in place.
+## `bounds` (terrain-local, empty = the whole map): e.g. the area around the
+## player on a big map, rebaked when they move away. Returns false while a
+## bake of that region is still running.
+func bake_navigation(region: NavigationRegion3D = null, bounds: AABB = AABB(), on_done: Callable = Callable()) -> bool:
+	var t := _target()
+	if t == null or not Meta.is_terrain(t):
+		return false
+	if region == null:
+		region = TerrainNavigation.ensure_region(t)
+	return TerrainNavigation.bake(t, region, _query_carve(t), bounds, true, on_done)
+
+## The answers follow the terrain data again (after changing it by hand;
+## edits made through this node do it themselves).
+func refresh_query() -> void:
+	_query = null
+
+# -----------------------------------------------------------------------------
+# Changing the ground in game. set_height / raise_area / flatten_area /
+# paint_style change the data; commit_edits() then rebuilds what they touched
+# (ground meshes, collision, details and their trunk collision, roads and
+# rivers, waterholes, far blocks, the answers of get_height() & co) and emits
+# terrain_changed. Positions and heights are global; heights are ground levels
+# (before a river bed's carve), kept within the terrain's height range.
+# export_edits() / import_edits(): a save game's copy of them.
+# -----------------------------------------------------------------------------
+
+## The ground level of the grid point nearest `global_position` (X / Z) set to
+## the global height `height`.
+func set_height(global_position: Vector3, height: float) -> void:
+	var t := _edit_target()
+	if t == null:
+		return
+	var local := t.to_local(Vector3(global_position.x, height, global_position.z))
+	_add_edit(TerrainEdits.set_level(t, Vector2(local.x, local.z), local.y))
+
+## The ground raised by `amount` metres at `center` (X / Z), less and less
+## towards `radius`, not past it. Negative `amount`: lowered (a crater).
+func raise_area(center: Vector3, radius: float, amount: float) -> void:
+	var t := _edit_target()
+	if t == null:
+		return
+	var local := t.to_local(center)
+	var scale := t.global_transform.basis.get_scale()
+	_add_edit(TerrainEdits.shape(t, TerrainEdits.Op.RAISE, Vector2(local.x, local.z), radius / maxf(scale.x, 0.0001), amount / maxf(scale.y, 0.0001)))
+
+## The ground brought to the global height `height` within `radius` of
+## `center` (X / Z): fully in the middle, blending into the slope at the edge.
+func flatten_area(center: Vector3, radius: float, height: float) -> void:
+	var t := _edit_target()
+	if t == null:
+		return
+	var local := t.to_local(Vector3(center.x, height, center.z))
+	var scale := t.global_transform.basis.get_scale()
+	_add_edit(TerrainEdits.shape(t, TerrainEdits.Op.FLATTEN, Vector2(local.x, local.z), radius / maxf(scale.x, 0.0001), local.y))
+
+## Palette style `style` (get_ground_style, find_ground_style) on the cells
+## within `radius` of `center` (X / Z), at least the cell under it.
+func paint_style(center: Vector3, radius: float, style: int) -> void:
+	var t := _edit_target()
+	if t == null:
+		return
+	var local := t.to_local(center)
+	var scale := t.global_transform.basis.get_scale()
+	_add_edit(TerrainEdits.paint(t, Vector2(local.x, local.z), radius / maxf(scale.x, 0.0001), style))
+
+## Palette style id of the biome ground style `style_name` (as
+## get_ground_style_name() names it, e.g. &"Mud"), -1 when the map has none.
+func find_ground_style(style_name: StringName) -> int:
+	var t := _target()
+	if t == null or not Meta.is_terrain(t):
+		return -1
+	var palette: Array = t.get_meta(Meta.STYLE_PALETTE, [])
+	for i in palette.size():
+		var entry: Variant = palette[i]
+		if entry is Dictionary:
+			var style: Dictionary = entry
+			if StringName(str(style.get("biome_style", ""))) == style_name:
+				return i
+	return -1
+
+## True when edits wait for commit_edits().
+func has_pending_edits() -> bool:
+	return _has_edits
+
+## Rebuilds what the edits since the last call touched, then emits
+## terrain_changed. Call it once after a batch of edits (an explosion, a
+## building's foundation), not after each one. Before the ground is built:
+## build() uses the new data, or the chunks already built are rebuilt once it
+## is in (terrain_ready).
+func commit_edits() -> void:
+	var t := _target()
+	if not _has_edits or t == null or not Meta.is_terrain(t):
+		return
+	if _terrain == null and build_on_ready and not Engine.is_editor_hint():
+		# build() comes next (deferred from _ready): it reads the new data.
+		_edit_rect = Rect2()
+		_has_edits = false
+		_query = null
+		return
+	if _terrain != null and not is_ground_ready:
+		if not terrain_ready.is_connected(commit_edits):
+			terrain_ready.connect(commit_edits, CONNECT_ONE_SHOT)
+		return
+	var rect := _edit_rect
+	_edit_rect = Rect2()
+	_has_edits = false
+	_rebuild_edited(t, rect)
+	terrain_changed.emit(rect)
+
+## The edits made since the game loaded the terrain (or generated its map),
+## small (only the rectangles that changed, zstd-packed): store it in a save
+## game. Empty when nothing changed.
+func export_edits() -> PackedByteArray:
+	var t := _target()
+	if t == null or not Meta.is_terrain(t):
+		return PackedByteArray()
+	return TerrainEdits.export_edits(t, _edit_base)
+
+## Puts export_edits() data back (same terrain, same generated map) and
+## commits it. Returns false when `data` is not edits of this terrain.
+func import_edits(data: PackedByteArray) -> bool:
+	var t := _edit_target()
+	if t == null:
+		return false
+	var area: Variant = TerrainEdits.import_edits(t, data)
+	if area == null:
+		return false
+	var rect: Rect2 = area
+	_add_edit(rect)
+	commit_edits()
+	return true
+
+## The terrain about to be edited, its data before the first edit kept.
+func _edit_target() -> Node3D:
+	var t := _target()
+	if t == null or not Meta.is_terrain(t):
+		return null
+	if _edit_base.is_empty():
+		_edit_base = TerrainEdits.base_of(t)
+		# The river carve of the ground before the edits: rebuild_river_carve
+		# then tells which chunks a river's new bed reaches.
+		_query_carve(t)
+	return t
+
+func _add_edit(rect: Rect2) -> void:
+	if not rect.has_area():
+		return
+	_edit_rect = rect if not _has_edits else _edit_rect.merge(rect)
+	_has_edits = true
+
+func _rebuild_edited(t: Node3D, rect: Rect2) -> void:
+	_query = null
+	if _terrain == null:
+		_terrain = t
+	if _builder == null:
+		_builder = _shared_builder if _shared_builder != null else TerrainBuilder.new()
+	StylePalette.ensure_material_data(t)
+	var keys := _builder.chunks_for_local_rect(t, rect)
+	# A river's level follows the ground along it: its bed may move far from
+	# the edit.
+	if RiverMesher.any_river_near(t, rect):
+		for key in _builder.rebuild_river_carve(t):
+			if not keys.has(key):
+				keys.append(key)
+		if _ground_streaming:
+			_ground_carve = _builder.get_river_carve(t)
+	if not _stream_job.is_empty():
+		var job_chunk: Vector2i = _stream_job["chunk"]
+		if keys.has(job_chunk):
+			_drop_stream_job()
+	var roads := FeatureEraser.any_feature_intersects(t, rect)
+	if _ground_streaming:
+		_rebuild_streamed_edits(t, keys, rect, roads)
+	else:
+		_rebuild_whole_edits(t, keys, rect, roads)
+	_retarget_in = 0.0
+
+## Ground built whole (or saved in the scene): the chunks at once.
+func _rebuild_whole_edits(t: Node3D, keys: Array[Vector2i], rect: Rect2, roads: bool) -> void:
+	# Details streamed by this node: made again as it streams them.
+	var streamed_details := _streaming
+	var trunks := not streamed_details and detail_collision and DetailCollision.has_collision_layers(t)
+	for c in keys:
+		var parts := _builder.rebuild_chunk(t, c.x, c.y, not streamed_details)
+		if parts.is_empty():
+			continue
+		if streamed_details:
+			_keep_shading(c, parts.get("shading"))
+			var built_layers: int = _built.get(c, 0)
+			if built_layers != 0:
+				_redo[c] = built_layers
+			if _collided.has(c):
+				_collided[c] = -2
+		elif trunks:
+			_build_chunk_collision(c.x, c.y)
+	var feature_faces := PackedVector3Array()
+	if roads:
+		feature_faces = _builder.rebuild_feature_mesh(t, rect)
+	_builder.rebuild_waterholes(t, rect)
+	var body := t.get_node_or_null(GROUND_COLLISION_NAME) as StaticBody3D
+	if body != null:
+		for c in keys:
+			_replace_ground_shape(body, c, _chunk_faces(c.x, c.y))
+		if roads:
+			_replace_ground_shape(body, FEATURE_OWNER, feature_faces)
+	elif t.has_node(Meta.GENERATED_COLLISION_BODY_NAME):
+		# The editor's body, saved with the scene: its edited chunk shapes.
+		_builder.rebuild_collision(t, feature_faces if roads else _saved_feature_faces(t))
+
+## stream_ground: the built chunks are made again on the worker threads and
+## swapped in when ready (_finish_ground), the others will be built from the
+## new data, their far blocks made again.
+func _rebuild_streamed_edits(t: Node3D, keys: Array[Vector2i], rect: Rect2, roads: bool) -> void:
+	editor_chunks_changed(keys)
+	for c in keys:
+		if _ground.has(c):
+			_rebuild[c] = true
+	editor_holes_changed(rect)
+	if not roads:
+		return
+	if _split_features:
+		_start_edit_roads()
+		return
+	var faces := _builder.rebuild_feature_mesh(t, rect)
+	var body := t.get_node_or_null(GROUND_COLLISION_NAME) as StaticBody3D
+	if body != null:
+		_replace_ground_shape(body, FEATURE_OWNER, faces)
+
+## The shape of `key` (a chunk, FEATURE_OWNER) on the whole-ground body.
+func _replace_ground_shape(body: StaticBody3D, key: Vector2i, faces: PackedVector3Array) -> void:
+	var owner_id: int = _ground_owners.get(key, -1)
+	if owner_id >= 0:
+		body.remove_shape_owner(owner_id)
+	_ground_owners[key] = _add_ground_shape(faces)
+
+## Roads / rivers collision faces of the editor's saved collision body.
+func _saved_feature_faces(t: Node3D) -> PackedVector3Array:
+	var body := t.get_node(Meta.GENERATED_COLLISION_BODY_NAME)
+	if body.has_node(Meta.GENERATED_COLLISION_SHAPE_NAME):
+		# Saved as a single shape (older scene): only the meshes tell.
+		return _builder.get_feature_collision_faces(t)
+	var node := body.get_node_or_null(TerrainBuilder.FEATURE_COLLISION_SHAPE_NAME) as CollisionShape3D
+	var shape := node.shape as ConcavePolygonShape3D if node != null else null
+	return shape.get_faces() if shape != null else PackedVector3Array()
+
+## stream_ground (game): the roads and rivers cut by chunk again, on worker
+## threads (_step_edit_roads puts the changed pieces in place).
+func _start_edit_roads() -> void:
+	if not _edit_roads.is_empty():
+		# One at a time: the next one starts from the data then.
+		_edit_roads["again"] = true
+		return
+	var job := _builder.start_feature_mesh_threaded(_terrain, true)
+	_feature_jobs.append(job)
+	_edit_roads = {"job": job}
+
+func _step_edit_roads() -> void:
+	var job: Dictionary = _edit_roads["job"]
+	if not _builder.step_feature_mesh(job, maxi(_slice_usec() / 4, 1)):
+		return
+	_feature_jobs.erase(job)
+	var again: bool = _edit_roads.get("again", false)
+	_edit_roads = {}
+	var old_pieces := _road_pieces
+	var old_faces := _road_faces
+	_road_pieces = {}
+	_road_faces = {}
+	var chunks: Dictionary = job["chunks"]
+	var chunk_faces: Dictionary = job["chunk_faces"]
+	for index: int in chunks:
+		_road_pieces[Vector2i(index % _chunk_count, index / _chunk_count)] = chunks[index]
+	for index: int in chunk_faces:
+		_road_faces[Vector2i(index % _chunk_count, index / _chunk_count)] = chunk_faces[index]
+	for key: Vector2i in _ground.keys():
+		if old_pieces.get(key) != _road_pieces.get(key):
+			var chunk := _chunk_node(key)
+			var old_roads := chunk.get_node_or_null(ROADS_NAME) if chunk != null else null
+			if old_roads != null:
+				chunk.remove_child(old_roads)
+				old_roads.queue_free()
+			_attach_roads(key)
+		if old_faces.get(key) != _road_faces.get(key) and _ground_shapes.has(key):
+			_shape_dirty[key] = true
+			_shape_queue.push_front([0.0, key])
+	if again:
+		_start_edit_roads()
+
+func _current_query() -> LowpolyTerrainQuery:
+	var t := _target()
+	if _query == null:
+		_query = get_query()
+	elif t != null and t.is_inside_tree() and t.global_transform != _query.get_transform():
+		_query.set_transform(t.global_transform)
+	return _query
+
+func _query_carve(t: Node3D) -> PackedFloat32Array:
+	if t == null or not Meta.is_terrain(t):
+		return PackedFloat32Array()
+	if _builder == null:
+		_builder = _shared_builder if _shared_builder != null else TerrainBuilder.new()
+	return _builder.get_river_carve(t)
+
 ## Forgets the previous build (a new build() starts from scratch).
 func _reset_build_state() -> void:
+	_query = null
+	# The edits stay in the data (and in _edit_base's comparison) unless a
+	# new map is generated.
+	_edit_rect = Rect2()
+	_has_edits = false
+	_ground_owners.clear()
+	_redo.clear()
+	_rebuild.clear()
+	_edit_roads = {}
 	_builder = _shared_builder if _shared_builder != null else TerrainBuilder.new()
 	_steps.clear()
 	_done = 0
@@ -486,8 +874,8 @@ func _queue_ground_steps(order: Array[Vector2i]) -> void:
 		if not _ground_streaming:
 			_steps.append(_reset_ground_collision)
 			for c in order:
-				_steps.append(func() -> void: _add_ground_shape(_chunk_faces(c.x, c.y)))
-		_steps.append(func() -> void: _add_ground_shape(feature_faces[0]))
+				_steps.append(func() -> void: _ground_owners[c] = _add_ground_shape(_chunk_faces(c.x, c.y)))
+		_steps.append(func() -> void: _ground_owners[FEATURE_OWNER] = _add_ground_shape(feature_faces[0]))
 
 ## Load steps of the details (all of them, or the start ring when
 ## streaming) and of the tree trunk collision.
@@ -647,6 +1035,9 @@ func _stream(delta: float) -> void:
 	var ground_idle := true
 	if _ground_streaming:
 		ground_idle = _pump_ground(maxi(budget, 1))
+		if not _edit_roads.is_empty():
+			_step_edit_roads()
+			ground_idle = false
 	while Time.get_ticks_usec() - start < budget:
 		if _stream_job.is_empty():
 			if _stream_queue.is_empty():
@@ -685,6 +1076,13 @@ func _stream(delta: float) -> void:
 		var built_mask: int = _built.get(done_chunk, 0)
 		var job_mask: int = _stream_job["mask"]
 		_built[done_chunk] = built_mask | job_mask
+		if _redo.has(done_chunk):
+			var redo_left: int = _redo[done_chunk]
+			redo_left &= ~job_mask
+			if redo_left == 0:
+				_redo.erase(done_chunk)
+			else:
+				_redo[done_chunk] = redo_left
 		_stream_job = {}
 		chunk_details_changed.emit(done_chunk.x, done_chunk.y)
 		# Its trunk collision can come next.
@@ -727,6 +1125,10 @@ func _retarget(focus: Vector2) -> void:
 			_built[c] = built
 			chunk_details_changed.emit(x, z)
 		var want := _layers_within(distance, stream_margin) & ~built
+		# Built from the ground before an edit: made again (kept on screen
+		# until then).
+		var redo: int = _redo.get(c, 0)
+		want |= redo & built
 		if want != 0:
 			# With the layers about to be wanted too: one job (one ground
 			# colour pass) instead of one per layer.
@@ -821,7 +1223,12 @@ func _retarget_ground(focus: Vector2) -> void:
 			var c := Vector2i(x, z)
 			var distance := _chunk_distance(c, focus)
 			if _ground.has(c):
-				if _ground_collision and distance <= ground_collision_distance and not _ground_shapes.has(c) and not _leaving.has(c):
+				if _rebuild.has(c):
+					# Edited: made again from the new data.
+					if distance <= build_distance and not _ground_tasks.has(c):
+						_ground_queue.append([distance, c])
+				elif _ground_collision and distance <= ground_collision_distance and not _leaving.has(c) \
+						and (not _ground_shapes.has(c) or _shape_dirty.has(c)) and not _ground_tasks.has(c):
 					_shape_queue.append([distance, c])
 			elif distance <= build_distance and not _ground_tasks.has(c):
 				_ground_queue.append([distance, c])
@@ -910,8 +1317,9 @@ func _pump_ground(budget_usec: int, with_far: bool = true) -> bool:
 			if not _ground_queue.is_empty():
 				var queued: Array = _ground_queue.pop_front()
 				var c: Vector2i = queued[1]
-				if _ground.has(c) or _ground_tasks.has(c):
+				if (_ground.has(c) and not _rebuild.has(c)) or _ground_tasks.has(c):
 					continue
+				_rebuild.erase(c)
 				var carve := _ground_carve
 				var skirt_step := _far_step() if _far_on else 0
 				# The final arrays, shadow caster and collision faces on the
@@ -963,12 +1371,18 @@ func _pump_ground(budget_usec: int, with_far: bool = true) -> bool:
 			return done
 	return true
 
-## Makes the collision of the next queued chunk (if still built and without).
+## Makes the collision of the next queued chunk (if still built and without,
+## or edited since).
 func _next_shape() -> void:
 	var queued: Array = _shape_queue.pop_front()
 	var c: Vector2i = queued[1]
-	if _ground.has(c) and not _ground_shapes.has(c):
-		_add_chunk_shape(c)
+	if not _ground.has(c) or (_ground_shapes.has(c) and not _shape_dirty.has(c)):
+		return
+	if _ground_shapes.has(c):
+		# Removed at the end of the frame: never a frame without ground.
+		_remove_chunk_shape(c)
+	_shape_dirty.erase(c)
+	_add_chunk_shape(c)
 
 ## True when no ground chunk within ready_distance of the focus is still
 ## queued or being built, nor its collision shape (waterholes not waited for).
@@ -1072,9 +1486,21 @@ func _finish_ground(c: Vector2i, arrays: Dictionary) -> void:
 	var block := _block_of(c)
 	var far_mask: int = _far_masks.get(block, -1)
 	chunk.visible = not _far_blocks.has(block) or (far_mask & LodMesher.chunk_bit(c.x, c.y)) != 0
+	if _ground.has(c):
+		# Made again after an edit: its details and trunk collision follow
+		# the new ground (the old ones stay on screen until then), its
+		# collision shape too.
+		var built_layers: int = _built.get(c, 0)
+		if built_layers != 0:
+			_redo[c] = built_layers
+		if _collided.has(c):
+			_collided[c] = -2
+		if _ground_shapes.has(c):
+			_shape_dirty[c] = true
+	else:
+		_built.erase(c)
+		_collided.erase(c)
 	_ground[c] = true
-	_built.erase(c)
-	_collided.erase(c)
 	_keep_shading(c, parts.get("shading"))
 	_attach_roads(c)
 	if _ground_collision and distance <= ground_collision_distance:
@@ -1124,6 +1550,9 @@ func _free_ground(c: Vector2i) -> void:
 	_leaving.erase(c)
 	_built.erase(c)
 	_collided.erase(c)
+	_redo.erase(c)
+	_rebuild.erase(c)
+	_shape_dirty.erase(c)
 	_shading_cache.erase(c)
 	_chunk_face_cache.erase(c)
 	# Its collision body went with it.
@@ -1397,14 +1826,17 @@ func _chunk_faces(chunk_x: int, chunk_z: int) -> PackedVector3Array:
 	var chunk := TerrainMesher.find_chunk(_terrain, chunk_x, chunk_z)
 	return chunk.mesh.get_faces() if chunk != null and chunk.mesh != null else PackedVector3Array()
 
-func _add_ground_shape(faces: PackedVector3Array) -> void:
+## Returns its shape owner on the body, -1 when none was added.
+func _add_ground_shape(faces: PackedVector3Array) -> int:
 	var body := _terrain.get_node_or_null(GROUND_COLLISION_NAME) as StaticBody3D
 	if body == null or faces.is_empty():
-		return
+		return -1
 	var shape := ConcavePolygonShape3D.new()
 	shape.backface_collision = true
 	shape.set_faces(faces)
-	body.shape_owner_add_shape(body.create_shape_owner(body), shape)
+	var owner_id := body.create_shape_owner(body)
+	body.shape_owner_add_shape(owner_id, shape)
+	return owner_id
 
 func _build_chunk_collision(chunk_x: int, chunk_z: int) -> void:
 	var chunk := TerrainMesher.find_chunk(_terrain, chunk_x, chunk_z)
@@ -1542,6 +1974,7 @@ func editor_skirt_step() -> int:
 ## old data is dropped, their far blocks are made again, the chunks not built
 ## yet will be built from the new data.
 func editor_chunks_changed(keys: Array[Vector2i]) -> void:
+	_query = null
 	for c in keys:
 		if _ground_tasks.has(c):
 			_stale[c] = true
@@ -1591,6 +2024,7 @@ func editor_details_changed() -> void:
 
 ## The river carve changed (the shared builder holds the new one).
 func editor_carve_changed() -> void:
+	_query = null
 	if _terrain != null and _ground_streaming:
 		_ground_carve = _builder.get_river_carve(_terrain)
 
@@ -1634,7 +2068,8 @@ func editor_refresh_collision(feature_faces: PackedVector3Array) -> void:
 	if body:
 		for owner_id in body.get_shape_owners():
 			body.remove_shape_owner(owner_id)
-		_add_ground_shape(feature_faces)
+		_ground_owners.clear()
+		_ground_owners[FEATURE_OWNER] = _add_ground_shape(feature_faces)
 
 ## The 3D editor's camera (EditorInterface looked up by name: this script
 ## also runs in exported games, where it does not exist).

@@ -45,6 +45,7 @@ const EditorCameraFramer = preload("ui/editor_camera_framer.gd")
 const TerrainStorage = preload("core/terrain_storage.gd")
 const DetailScatter = preload("mesh/detail_scatter.gd")
 const GroundBumps = preload("core/ground_bumps.gd")
+const TerrainNavigation = preload("navigation/terrain_navigation.gd")
 
 ## Delay after the last biome edit before the details are re-scattered.
 const BIOME_REBUILD_DELAY_MS := 250
@@ -912,6 +913,24 @@ func replace_details(terrain: Node3D) -> void:
 	_builder.flush_deferred()
 	_builder.rebuild_all_details(terrain)
 	_set_status("Details replaced", "Grass, rocks, trees and props put on the current ground in %d ms." % (Time.get_ticks_msec() - start))
+
+## Game > Bake Navigation: the terrain's NavigationRegion3D child
+## ("Navigation", made once) gets a navigation mesh of the walkable ground
+## (TerrainNavigation), baked on a worker thread.
+func bake_navigation(terrain: Node3D) -> void:
+	if not is_instance_valid(terrain) or not _builder.is_built(terrain):
+		return
+	_builder.flush_deferred()
+	var region := TerrainNavigation.ensure_region(terrain, EditorInterface.get_edited_scene_root())
+	var start := Time.get_ticks_msec()
+	var done := func() -> void:
+		var polygons := region.navigation_mesh.get_polygon_count() if is_instance_valid(region) and region.navigation_mesh else 0
+		_set_status("Navigation baked", "%d polygons in %d ms (node %s). Bake again after editing the ground." % [polygons, Time.get_ticks_msec() - start, TerrainNavigation.REGION_NAME])
+		EditorInterface.mark_scene_as_unsaved()
+	if TerrainNavigation.bake(terrain, region, _builder.get_river_carve(terrain), AABB(), true, done):
+		_set_status("Baking navigation...")
+	else:
+		_set_status("Navigation", "A bake is already running.")
 
 func _apply_ground_shadows(terrain: Node3D) -> void:
 	if is_instance_valid(terrain):
