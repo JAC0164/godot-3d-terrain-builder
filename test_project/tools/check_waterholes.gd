@@ -194,6 +194,52 @@ func _initialize() -> void:
 	_check(WaterholeStyle.apply_settings_to_all(terrain) == 1 and is_equal_approx(float(WaterholeStyle.list(terrain)[0]["depth"]), 1.3), "apply settings to existing waterholes")
 	_check(is_equal_approx(float(WaterholeStyle.list(terrain)[0]["radius"]), radius), "apply keeps the radius")
 
+	# 6b. The shape comes from the biome (Edit Biome > Waterholes).
+	var stored: Dictionary = WaterholeStyle.list(terrain)[0]
+	var own_fields := 0
+	for field: String in WaterholeStyle.SHAPE:
+		if stored.has(field):
+			own_fields += 1
+	_check(own_fields == 0, "a waterhole stores no shape, it follows the biome (%d own fields)" % own_fields)
+	var shape_biome: TerrainBiome = TerrainBiome.of(terrain)
+	builder.rebuild_all(terrain)
+	var carve_default :=builder.get_river_carve(terrain).duplicate()
+	var bounds_default := WaterholeStyle.bounds_of(terrain, 0)
+	var signature := shape_biome.look_signature()
+	shape_biome.waterhole_irregularity = 0.5
+	shape_biome.waterhole_rim_lip = 0.3
+	_check(shape_biome.look_signature() != signature, "the biome's shape is part of its look signature (the editor rebuilds)")
+	builder.rebuild_all(terrain)
+	_check(builder.get_river_carve(terrain) != carve_default and WaterholeStyle.bounds_of(terrain, 0) != bounds_default, "editing the biome's shape reshapes the waterhole (carve, bounds)")
+	shape_biome.waterhole_irregularity = 0.22
+	shape_biome.waterhole_rim_lip = 0.1
+	builder.rebuild_all(terrain)
+	_check(builder.get_river_carve(terrain) == carve_default, "back to the biome's shape: same carve")
+
+	# 6c. Older scenes: shape settings on the terrain and in each waterhole.
+	var old_hole: Dictionary = stored.duplicate(true)
+	for field: String in WaterholeStyle.SHAPE:
+		var property: String = WaterholeStyle.SHAPE[field]
+		old_hole[field] = shape_biome.get(property)
+	old_hole["irregularity"] = 0.4
+	terrain.set_meta(Meta.WATERHOLES, [old_hole])
+	terrain.set_meta(WaterholeStyle.setting_key("floor"), 0.6)
+	_check(TerrainData.migrate_waterhole_shape(terrain), "migration runs on an older terrain")
+	var migrated: Dictionary = WaterholeStyle.list(terrain)[0]
+	var kept: Array = []
+	for field: String in WaterholeStyle.SHAPE:
+		if migrated.has(field):
+			kept.append(field)
+	var migrated_shape := WaterholeStyle.shape_in(terrain, migrated)
+	_check(kept == ["irregularity"] and is_equal_approx(migrated_shape.irregularity, 0.4) and is_equal_approx(migrated_shape.floor_ratio, shape_biome.waterhole_floor),
+		"migration keeps only the shape that differs from the biome (%s)" % [kept])
+	_check(not terrain.has_meta(WaterholeStyle.setting_key("floor")), "migration removes the terrain's shape settings")
+	_check(not TerrainData.migrate_waterhole_shape(terrain), "migration is done once")
+	WaterholeStyle.apply_settings_to_all(terrain)
+	_check(not WaterholeStyle.list(terrain)[0].has("irregularity"), "Apply to Existing Waterholes gives it the biome's shape")
+	terrain.set_meta(Meta.WATERHOLES, [stored])
+	builder.rebuild_all(terrain)
+
 	# 7. Erase restores the terrain exactly.
 	_check(FeatureEraser.has_feature_at(terrain, center + Vector2(0.3, 0.2), 0.5), "eraser hits the waterhole")
 	_check(FeatureEraser.erase_at(terrain, center, 0.5), "eraser removes it")

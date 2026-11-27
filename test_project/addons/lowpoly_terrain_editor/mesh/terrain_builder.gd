@@ -835,7 +835,7 @@ func rebuild_waterholes(terrain: Node3D, rect: Variant = null) -> void:
 		var node := container.get_node_or_null(node_name) as MeshInstance3D
 		if node != null and rect != null:
 			var area: Rect2 = rect
-			if not WaterholeStyle.make_shape(holes[i]).bounds.intersects(area, true):
+			if not WaterholeStyle.shape_in(terrain, holes[i]).bounds.intersects(area, true):
 				continue
 		node = _ensure_mesh_child(terrain, container, node_name)
 		node.mesh = WaterholeMesher.build(terrain, carve, holes[i])

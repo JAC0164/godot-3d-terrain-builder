@@ -14,7 +14,12 @@ core/
   grid_math.gd            pure grid + 2D geometry helpers
   terrain_data.gd         create / migrate terrain data, cell queries
   terrain_sampler.gd      height sampling (base, uncarved, carved)
-  terrain_snapshot.gd     undo snapshots: capture / apply / equal
+  terrain_snapshot.gd     undo snapshots: capture / apply / equal, and
+                          delta_pair (the Undo history keeps only the
+                          changed rectangle of each grid)
+  terrain_query.gd        LowpolyTerrainQuery: height, facet normal, ground
+                          style, ray hit from a copy of the data (no
+                          physics, usable from a worker thread)
   ground_bumps.gd         small bumps written in the heights (Look >
                           Ground Bumps): fixed noise x amount
   terrain_storage.gd      heights / mask / styles packed in one Zstandard
@@ -92,6 +97,9 @@ mesh/
   terrain_builder.gd      writes meshes/collision into child nodes, caches
 materials/
   material_factory.gd     terrain / road / water materials (terrain ones cached)
+  terrain_splat.gdshader  blended textured ground styles (splat weights in
+                          CUSTOM0 / CUSTOM1, mean colours far away, steep
+                          facets projected on a vertical plane)
   river_water.gdshader    water shader (screen-space refraction)
   river_water_mobile.gdshader  same without refraction ("Mobile Water"; phones always, MaterialFactory.phone_water)
   detail_wind.gdshader    detail material + wind sway (shrub / tree profiles, back faces culled)
@@ -110,13 +118,22 @@ generation/
   presets/*.tres          ready-made map recipes (savanna, temperate island)
   map_presets.gd          the presets list (Inspector "Map Preset") and the
                           default recipe of Generate Map (never a no-op)
+  heightmap_io.gd         Import / Export Heightmap: EXR (metres), 16-bit PNG
+                          + .json range, .r16 / .raw
+navigation/
+  terrain_navigation.gd   navigation mesh source geometry of the walkable
+                          ground (Game > Bake Navigation, bake_navigation())
 runtime/
   terrain_runtime.gd      LowpolyTerrainRuntime: in-game build (generated map,
                           unsaved meshes / details, tree + ground collision),
                           spread over frames, nearest chunks first; optional
                           detail streaming around the camera; also
                           packs / unpacks the terrain data on save / load
-                          (every terrain of the edited scene gets one)
+                          (every terrain of the edited scene gets one);
+                          game API: get_height() & co, bake_navigation(),
+                          set_height() / raise_area() / ... + commit_edits()
+  terrain_edits.gd        the game's ground edits (pure data) and their
+                          save format (export_edits / import_edits)
 ui/
   terrain_toolbar.gd      3D editor toolbar (signals only; "New Terrain"
                           with its name, then one row of 7 tool buttons with
@@ -145,7 +162,8 @@ ui/
   the user's global class list). Exceptions, the user-facing types: the
   `biomes/` Resources, `LowpolyMapRecipe` / `LowpolyMapPatch` and the
   `LowpolyTerrainRuntime` node carry a `Lowpoly*` `class_name` so users can
-  create them from the Inspector; the plugin's own code still preloads them. Everything
+  create them from the Inspector, and `LowpolyTerrainQuery` so game code can
+  type it; the plugin's own code still preloads them. Everything
   below `ui/` and `plugin.gd` is `static` and works on a bare `Node3D`,
   without the editor — that is what unit tests should target.
 - Data modules (`core/`, `styles/`, `editing/` except the stroke controller,
@@ -323,7 +341,13 @@ ui/
 - Dried waterholes are data only (`_lte_waterholes`): their depression is
   added to the carve array, their clay / crack colours (the biome's, shared
   by all waterholes of the terrain) are baked by TerrainShading (also when
-  shading is off), their mud plates are one mesh
+  shading is off). Each stores its centre, radius, seed, depth and plate
+  size; its shape (floor, irregularity, rim, lip, crack width, curl:
+  `WaterholeStyle.SHAPE`) is the biome's (`WaterholeStyle.migrate(hole,
+  biome)` fills it in; part of `look_signature()`, so editing it rebuilds
+  the carve). Older scenes kept it in each waterhole and as terrain
+  settings: `TerrainData.migrate_waterhole_shape()` removes the settings and
+  each field equal to the biome's; a different one stays (it wins). Their mud plates are one mesh
   per waterhole under `_GeneratedWaterholes`, and detail layers target them
   with `waterhole_zone`. Heights and cell styles are never written, so
   erasing a waterhole restores the terrain exactly. Checked by
@@ -561,6 +585,79 @@ ui/
   re-carves at its end, and `rebuild_river_carve()` returns the chunks whose
   carve changed (rebuilt too, also by `rebuild_area` for Undo). Checked by
   `test_project/tools/check_river_level.gd` and the smoke test.
+
+- Textured ground (`materials/terrain_splat.gdshader`, top faces of the
+  blended textured styles only; cliffs keep their own UVs). Each layer's mean
+  colour comes from the palette (`StylePalette.fill_texture_means`, sRGB) as
+  `mean_color[7]` (vec4, linear, `MaterialFactory.splat_means`): past `fade_end` no
+  texture is read at all, nearer one read per layer (no second
+  `textureLod(..., 14.0)` for the mean). On phones (`OS.has_feature("mobile")`)
+  the textures use `filter_linear_mipmap` instead of anisotropic
+  (`MaterialFactory._splat_shader`). A facet steeper than `STEEP` (normal.y
+  0.7, from `dFdx / dFdy` of the position, so one value per triangle) is
+  projected on the closest of 8 vertical planes (every 45 degrees) instead of
+  X / Z: no stretched streaks on cliffsides, still one read per layer, the
+  TANGENT / BINORMAL follow the projection for the normal maps. A custom
+  Ground Material that declares `layer_0` gets `mean_color` only if it
+  declares it too. Checked by `test_project/tools/check_splat_reads.gd`
+  (same picture within 1/255) and `tools/render_steep_slopes.gd` (board).
+- Editor collision (`TerrainBuilder.rebuild_collision`): one shape per chunk
+  under `_GeneratedTerrainCollision`, named like the chunk, plus one for the
+  roads / rivers (`FEATURE_COLLISION_SHAPE_NAME`). Only the chunks whose mesh
+  changed get a new shape (`_collision_dirty`), so a stroke on a big map no
+  longer rebuilds a whole-map shape. The single shape of older scenes is
+  removed at the next rebuild. Checked by `check_editor_collision.gd`.
+- Undo by area (`TerrainSnapshot.delta_pair`): the Undo history keeps, for
+  each edit, the bounding rectangle of what changed in the vertex grids and
+  in the cell grids (raw bytes) and only the other entries that changed;
+  a change of grid size keeps full snapshots. A stroke on a 1025 x 1025 map:
+  a few KB instead of ~2 x 13 MB. Checked by `check_undo_area.gd`.
+- Far thinning (`DetailScatter.apply`): a layer with density >=
+  `THIN_DENSITY` (0.4, i.e. grass), a draw distance and >= 2 instances in the
+  chunk stops at `THIN_FROM` (45 %) of its distance, without end margin, and
+  gets a child `FAR_NAME` (`_Details_Far`) holding every other instance
+  from there to the end (`visibility_range_begin`, no fade: no transparency
+  on phones). Its `custom_aabb` is the full set's box so both switch at the
+  same distance. Savanna 128 m: 86 nodes, 28 579 -> 14 309 instances far
+  away, 41 us of copy per node on the main thread, +0.9 MB. Counting and
+  fingerprint tools skip `_Details_Far` (`count_instances`,
+  `hash_everything.gd`, the smoke test). Checked by `check_far_thinning.gd`.
+- Game API (`LowpolyTerrainRuntime`, no Inspector setting): get_height /
+  get_normal / get_ground_style(_name) / is_on_terrain / get_height_range /
+  get_intersection answer from a `LowpolyTerrainQuery`: a copy of the drawn
+  surface (heights - carve + top offset), cells and styles, with the
+  terrain's global transform (moved, turned around Y, scaled; not tilted).
+  Each cell is split along its (0,0)-(1,1) diagonal like the mesher, so the
+  answers match the drawn triangles; NAN outside the map and over empty
+  cells. `get_query()` hands a copy to a worker thread; the runtime's own
+  copy is dropped by `commit_edits()` / `refresh_query()`. Checked by
+  `check_query_api.gd`.
+- Edits in game (`TerrainEdits`, pure data like `Brush`): set_height /
+  raise_area / flatten_area / paint_style change the data and grow a
+  pending rectangle; `commit_edits()` rebuilds what it touched (chunks,
+  their collision, details and trunk collision, roads / rivers, waterholes,
+  far blocks) and emits `terrain_changed(rect)`. `export_edits()` = the
+  rectangles of the grids that differ from the data at load (or after the
+  generated map), zstd-packed with a "LTE1" header; `import_edits()` puts
+  them back and commits. Checked by `check_runtime_edits.gd`.
+- Navigation (`TerrainNavigation`): the terrain gives the NavigationServer3D
+  its own source geometry instead of letting a region parse its nodes
+  (grass, water, shadow casters): the top faces of the ground cells as
+  drawn, without empty cells, cliffs and river beds (carve deeper than
+  `RIVER_DEPTH`), and an 8-sided obstacle per trunk of the layers with
+  collision. Bake Navigation (Inspector > Game) adds a `NavigationRegion3D`
+  child "Navigation" once and bakes it on a worker thread;
+  `bake_navigation(region, bounds)` does the same in game, e.g. around the
+  player on a big map. Checked by `check_navmesh.gd`.
+- Heightmaps (`HeightmapIO`, Advanced > Terrain Size): export writes
+  `<name>.exr` (metres, one float channel), `<name>.png` (16-bit grey,
+  written by hand: Godot saves 8-bit PNGs only and reads 16-bit ones as 8)
+  and `<name>.json` (the PNG's min / max and the map size). Import reads
+  EXR, PNG 8 / 16 bit and square .r16 / .raw, resized bilinearly to the
+  terrain's grid, clamped to its height limits; a PNG / raw spans its .json
+  range, else the current lowest to highest ground. Only the heights change
+  (Undo: one delta_pair). Checked by `check_heightmap_io.gd` and the smoke
+  test.
 
 ## Shared helpers (look here before writing it again)
 

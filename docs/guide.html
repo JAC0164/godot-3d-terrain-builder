@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Guide | Lowpoly Terrain Editor</title>
-  <meta name="description" content="How to use the Lowpoly Terrain Editor plugin for Godot 4: tools, Inspector, biomes, vegetation, Generate Map, pixel maps, your own models, in game, lighting and phones.">
+  <meta name="description" content="How to use the Lowpoly Terrain Editor plugin for Godot 4: tools, Inspector, biomes, vegetation, Generate Map, pixel maps, heightmaps, your own models, in game, ground queries and edits, navigation, lighting and phones.">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,8 +40,11 @@
         <li><a href="#look">Ground look and materials</a></li>
         <li><a href="#generate">Generate Map</a></li>
         <li><a href="#pixel-maps">Pixel maps</a></li>
+        <li><a href="#heightmaps">Heightmaps</a></li>
         <li><a href="#models">Your own models</a></li>
         <li><a href="#in-game">In game</a></li>
+        <li><a href="#game-api">Ground questions and edits</a></li>
+        <li><a href="#navigation">Navigation</a></li>
         <li><a href="#map-edge">Map edge</a></li>
         <li><a href="#lighting">Lighting and phones</a></li>
         <li><a href="#wind">Wind</a></li>
@@ -85,8 +88,9 @@
           <li>Ground you paint stays bare: add grass, trees and props afterwards with the
             <a href="#vegetation">Vegetation</a> tool (one thing at a time, nothing to compute while you shape
             the ground). Generate Map grows them on the whole map it makes.</li>
-          <li>The ground is walkable at once (<em>Inspector &gt; Game &gt; Walkable Collision</em>, on for new and
-            generated terrains; tick it on a terrain made before this version if your player falls through).</li>
+          <li>The ground is walkable at once (<em>Inspector &gt; Game &gt; Walkable Collision</em>, ticked by New
+            Terrain and Generate Map). A terrain made from code, or with an older version, starts with it off:
+            tick it if your player falls through.</li>
         </ul>
       </section>
 
@@ -149,12 +153,12 @@
               <tr><td><strong>Map</strong></td><td>Preset, seed, Generate Map.</td></tr>
               <tr><td><strong>Look</strong></td><td>Biome (the whole theme), details, Smooth Ground, Ground Bumps.</td></tr>
               <tr><td><strong>Roads, Rivers &amp; Waterholes</strong></td><td>What the tools draw next; Customise Road / Water.</td></tr>
-              <tr><td><strong>Game</strong></td><td>Collision, Runtime Build, draw distance, mobile water, ground shadows, detail seed.</td></tr>
+              <tr><td><strong>Game</strong></td><td>Collision, Bake Navigation, Runtime Build, draw distance, mobile water, ground shadows, detail seed.</td></tr>
             </tbody>
           </table>
         </div>
-        <p>Everything else is in the closed <strong>Advanced</strong> section: Terrain Size, Heights &amp;
-          Offsets, Custom Ground Style, Waterhole Shape, Details and Pixel Map. Hover a section title or a
+        <p>Everything else is in the closed <strong>Advanced</strong> section: Terrain Size (with Import / Export
+          Heightmap), Heights &amp; Offsets, Custom Ground Style, Details and Pixel Map. Hover a section title or a
           setting for its explanation. Everything about the look lives in the biome.</p>
       </section>
 
@@ -162,7 +166,7 @@
         <h2>Biomes</h2>
         <p>The biome is the terrain's whole theme: ground styles (colours, textures, normal and roughness
           maps), baked shading (style blend, slope tint, ambient occlusion, colour variation, large patches
-          that keep bare ground from looking flat, cliff darkening), waterhole colours, what grows, your own
+          that keep bare ground from looking flat, cliff darkening), waterhole colours and shape, what grows, your own
           ground / detail / road / water materials and the ambience (an Environment). The terrain only holds
           the shape: change the biome, the whole map changes with it, collisions untouched. Two come with the
           plugin: <code>biomes/presets/temperate.tres</code> (green grass, rock, sand, snow; used by new
@@ -178,8 +182,8 @@
           <li>Without a biome, <strong>Create Editable Biome</strong> puts an editable Temperate copy in the terrain.</li>
           <li>Scenes made with an older version are converted when opened: a terrain whose shading,
             waterhole colours, Ground / Detail Material or road / water colour had been tuned by hand gets its
-            own copy of the biome holding them, so it looks the same; roads and rivers drawn with another look
-            keep it (save the scene to keep the conversion).</li>
+            own copy of the biome holding them, so it looks the same; roads, rivers and waterholes drawn with
+            another look or shape keep it (save the scene to keep the conversion).</li>
         </ul>
         <p>The biome's <strong>detail layers</strong> say what grows, how dense, on which ground and slope. You can
           make your own biomes from code too: the test project's <code>tools/trial_biomes.gd</code> builds
@@ -225,9 +229,11 @@
       <section id="waterholes">
         <h2>Waterholes</h2>
         <p>The <strong>Waterhole</strong> tool places a dried waterhole with cracked mud on click
-          (<kbd>Ctrl</kbd>+drag with Ground inside it removes it). Its settings are under <em>Roads, Rivers &amp;
-          Waterholes</em> (depth, mud plate size) and <em>Advanced &gt; Waterhole Shape</em>. Its clay and crack colours
-          come from the biome (Waterholes group), the same for every waterhole of the terrain.</p>
+          (<kbd>Ctrl</kbd>+drag with Ground inside it removes it). Its depth and mud plate size are under
+          <em>Roads, Rivers &amp; Waterholes</em>, for the next ones (<em>Apply to Existing Waterholes</em> gives them
+          to those already placed). Its shape (flat floor, irregular outline, rim, cracks) and its clay and crack
+          colours come from the biome (<em>Edit Biome &gt; Waterholes</em>), the same for every waterhole of the
+          terrain.</p>
       </section>
 
       <section id="look">
@@ -252,7 +258,8 @@
           <li><strong>Realistic</strong>: give the ground styles a texture, and in their <em>Surface (optional)</em>
             group a normal map and a roughness map from the same texture set. The blended ground then lights
             them (on 4 of the 7 blended textures at most, to stay within what phones can sample); textured cliffs
-            too. Far away and under the grass, the texture's mean colour is used: no colour to match by hand.</li>
+            too. Far away and under the grass, the texture's mean colour is used: no colour to match by hand.
+            On steep slopes the texture is laid from the side, so it is not stretched down the cliffside.</li>
           <li><strong>Materials &amp; Ambience</strong>: Ground Material and Detail Material replace the built-in
             materials (toon, unshaded, palette, retro...). Road Color / Road Material and Water Color / Water
             Material give the roads and rivers their look; <em>Customise Road</em> and <em>Customise Water</em>
@@ -303,10 +310,29 @@
         </div>
         <p>Drop the image in <em>Inspector &gt; Advanced &gt; Pixel Map &gt; Source Image</em> and click
           <strong>Generate from Image</strong>. You can paint pixel maps in any paint program with these 4 pure
-          colours, or use the <a href="map-editor.html"><strong>Pixel Map Editor</strong></a> (in the browser, works
+          colours (any other colour counts as the nearest of the four; black and grey are empty), or use the <a href="map-editor.html"><strong>Pixel Map Editor</strong></a> (in the browser, works
           offline once open): generate maps from a seed (island, archipelago, continent, central lake, valley,
           plateau, with the share of each colour), retouch them with pencil, bucket, shapes and mirror, then
           <em>Export PNG</em>. Its source is in <code>tools/pixel-map-editor</code>.</p>
+      </section>
+
+      <section id="heightmaps">
+        <h2>Heightmaps</h2>
+        <p>To shape the relief in another terrain tool or an image editor and back:
+          <em>Inspector &gt; Advanced &gt; Terrain Size</em>.</p>
+        <ul>
+          <li><strong>Export Heightmap</strong> writes three files side by side: <code>name.exr</code> (the heights
+            in metres), <code>name.png</code> (16-bit grey, lowest ground = black, highest = white) and
+            <code>name.json</code> (that lowest and highest height, for the PNG).</li>
+          <li><strong>Import Heightmap</strong> reads an EXR (metres), a PNG (8 or 16 bit) or a square
+            <code>.r16</code> / <code>.raw</code> (16-bit). The image is resized to the terrain's grid. A PNG or raw
+            has no unit: it spans the range of the <code>.json</code> next to it, else the terrain's current lowest
+            to highest ground.</li>
+          <li>Only the heights change: painted ground, styles, roads and rivers stay. Heights are kept within
+            <em>Heights &amp; Offsets &gt; Lowest / Highest Ground</em>. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it.</li>
+          <li>Import the exported files again and you get the same heights back (to the precision of the
+            format).</li>
+        </ul>
       </section>
 
       <section id="models">
@@ -350,14 +376,88 @@ func new_level() -&gt; void:
           <li>Tick <strong>Generate Map</strong> on the runtime node to build a new map from its recipe + seed
             when the game starts (procedural levels).</li>
           <li><strong>Runtime Build</strong> (<em>Inspector &gt; Game</em>) chooses what the scene file stores:
-            <em>All at runtime</em> (default: only the terrain data, a few hundred KB; meshes, details, roads and
-            collision are rebuilt when the scene opens), <em>Details at runtime</em>, or <em>Save everything</em>
-            (biggest scene, fastest loading).</li>
+            <em>All at runtime</em> (what New Terrain picks: only the terrain data, a few hundred KB; meshes,
+            details, roads and collision are rebuilt when the scene opens), <em>Details at runtime</em>, or
+            <em>Save everything</em> (biggest scene, fastest loading; what a terrain made from code, or with an
+            older version, keeps until you change it).</li>
           <li>With Save everything, most of the size is the saved meshes, details and collision: about 19 MB
             of text for a 193 m map, against 160 KB with All at runtime.</li>
           <li>Tip: save big maps as <code>.scn</code> (binary) instead of <code>.tscn</code>: about 5x smaller and 10x
             faster to open.</li>
         </ul>
+      </section>
+
+      <section id="game-api">
+        <h2>Ground questions and edits</h2>
+        <p>The runtime node answers questions about the ground without physics, from the same triangles that
+          are drawn, so the answers also hold on chunks that have no collision. Positions are global; the terrain
+          may be moved, turned around Y and scaled.</p>
+<pre><code>@onready var runtime: LowpolyTerrainRuntime = $LowpolyTerrain/_LowpolyTerrainRuntime
+
+func _physics_process(_delta: float) -&gt; void:
+    var ground := runtime.get_height(global_position)  # NAN off the map or over a hole
+    if is_nan(ground):
+        return
+    match runtime.get_ground_style_name(global_position):  # the biome's ground style
+        &amp;"Sand":
+            speed = 3.0
+        &amp;"Rock":
+            footstep = rock_step</code></pre>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              <tr><td><code>get_height(pos)</code></td><td>Global height of the ground under <code>pos</code>, <code>NAN</code> without ground.</td></tr>
+              <tr><td><code>get_normal(pos)</code></td><td>Normal of the facet under <code>pos</code> (slopes, aligning a vehicle).</td></tr>
+              <tr><td><code>get_ground_style_name(pos)</code></td><td>Name of the biome ground style there (<code>&amp;"Grass"</code>...), <code>&amp;""</code> without ground or for a Custom style. <code>get_ground_style(pos)</code> gives its id.</td></tr>
+              <tr><td><code>is_on_terrain(pos)</code></td><td>True when there is ground under <code>pos</code>.</td></tr>
+              <tr><td><code>get_height_range()</code></td><td>Lowest and highest ground, as a <code>Vector2</code>.</td></tr>
+              <tr><td><code>get_intersection(from, dir)</code></td><td>Where a ray first goes down through the ground (mouse picking, artillery), <code>Vector3(NAN, NAN, NAN)</code> when it misses.</td></tr>
+              <tr><td><code>get_query()</code></td><td>A <code>LowpolyTerrainQuery</code> with the same questions, to use from a worker thread (AI, spawning). It is a copy: ask for a new one after the ground changes.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The game can also change the ground: craters, a building's foundation, a dug trench. Make the edits,
+          then call <code>commit_edits()</code> once. It rebuilds what they touched (ground, collision, grass and
+          trees, roads and rivers on it) and emits <code>terrain_changed(rect)</code>.</p>
+<pre><code>func explode(at: Vector3) -&gt; void:
+    runtime.raise_area(at, 4.0, -1.5)  # a crater: 4 m radius, 1.5 m deep in the middle
+    runtime.paint_style(at, 3.0, runtime.find_ground_style(&amp;"Rock"))
+    runtime.commit_edits()
+
+func save_game() -&gt; PackedByteArray:
+    return runtime.export_edits()  # only what changed, packed: a few KB
+
+func load_game(data: PackedByteArray) -&gt; void:
+    runtime.import_edits(data)  # same scene, same generated map</code></pre>
+        <ul>
+          <li>Also <code>set_height(pos, height)</code> (one grid point) and <code>flatten_area(center, radius,
+            height)</code>. Heights stay within the terrain's lowest and highest ground.</li>
+          <li>Batch the edits of one event and commit once: each commit rebuilds the chunks touched.</li>
+          <li>Rebake the navigation after an edit if agents walk there (see below).</li>
+        </ul>
+      </section>
+
+      <section id="navigation">
+        <h2>Navigation</h2>
+        <p>For <code>NavigationAgent3D</code>: click <strong>Bake Navigation</strong> in <em>Inspector &gt; Game</em>.
+          It adds a <code>NavigationRegion3D</code> child named <code>Navigation</code> (the first time) and bakes
+          the walkable ground into it. No setting to tune: the terrain hands its ground to the navigation server
+          itself, so the grass, the water and the shadow meshes are never read.</p>
+        <ul>
+          <li>Holes, cliff walls and river beds are left out; trunks of trees with a Collision Radius are
+            obstacles.</li>
+          <li>Bake again after editing the ground in the editor. Change the agent size in the region's
+            <em>Navigation Mesh</em> resource like for any region.</li>
+          <li>In game, <code>runtime.bake_navigation(region, bounds)</code> bakes on a worker thread; with
+            <code>bounds</code> (terrain-local, X and Z are used) only that area. On a big map, bake around the
+            player and bake again when they move away.</li>
+        </ul>
+<pre><code>func _on_player_moved_far() -&gt; void:
+    var local: Vector3 = terrain.to_local(player.global_position)
+    var bounds := AABB(local - Vector3(80, 0, 80), Vector3(160, 0, 160))
+    runtime.bake_navigation(null, bounds)  # null = the terrain's Navigation child</code></pre>
+        <p>The test project has a ready-made node for that: <code>test_project/world/navigation_follow.gd</code>
+          (set its runtime and target; it rebakes when the target moves 40 m, and after edits in game).</p>
       </section>
 
       <section id="map-edge">
@@ -386,7 +486,10 @@ func new_level() -&gt; void:
           <li>For low-end phones, untick <em>Game &gt; Ground Casts Shadows</em>: hills no longer cast shadows on the
             plain (trees, rocks and props keep theirs), about 20% fewer triangles drawn and roughly 10% less
             GPU time on a 192 m generated map.</li>
-          <li>Phones always get river water without screen-copy refraction.</li>
+          <li>Phones always get river water without screen-copy refraction, and cheaper filtering on the
+            ground textures.</li>
+          <li>Dense layers (grass) keep one tuft in two beyond about half their draw distance, with no fade
+            and nothing to set: far fewer blades drawn where you cannot count them.</li>
           <li>Roads and rivers cast no shadow (they lie flat on the ground).</li>
         </ul>
       </section>

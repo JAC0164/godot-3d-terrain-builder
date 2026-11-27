@@ -263,7 +263,7 @@ func _build_features_section(panel: VBoxContainer, terrain: Node3D) -> void:
 	var count := WaterholeStyle.list(terrain).size()
 	var on_terrain := "no waterhole yet" if count == 0 else ("1 waterhole" if count == 1 else "%d waterholes" % count)
 	_add_button(section, "Apply to Existing Waterholes",
-		"Give the waterholes already on this terrain (%s) the settings above and those of Advanced > Waterhole Shape. They keep their place, size and cracks. Ctrl+Z undoes it." % on_terrain,
+		"Give the waterholes already on this terrain (%s) the depth and plate size above, and the shape of the biome (Edit Biome > Waterholes) to those placed with an older version that kept their own. They keep their place, size and cracks. Ctrl+Z undoes it." % on_terrain,
 		func() -> void: host.apply_waterhole_settings(terrain))
 
 ## Game: what matters once the scene runs (collision, file size, performance).
@@ -312,7 +312,6 @@ func _build_advanced_section(panel: VBoxContainer, terrain: Node3D) -> void:
 	_build_size_section(advanced, terrain)
 	_build_heights_section(advanced, terrain)
 	_build_custom_style_section(advanced, terrain)
-	_build_waterhole_shape_section(advanced, terrain)
 	_build_advanced_details_section(advanced, terrain)
 	_build_pixel_map_section(advanced, terrain)
 
@@ -347,34 +346,14 @@ func _build_custom_style_section(parent: VBoxContainer, terrain: Node3D) -> void
 		"The colors / textures the Ground tool paints now. Picking a ground style (list next to the Ground tool) fills them in; change them here for a style of your own (the list then shows Custom).")
 	_add_color_row(section, terrain, "Top Color", Meta.BRUSH_TOP_COLOR, Meta.DEFAULT_TOP_COLOR, "Color of the ground painted next (when Top Texture is empty).", _plain_setter(terrain, Meta.BRUSH_TOP_COLOR))
 	_add_color_row(section, terrain, "Side Color", Meta.BRUSH_CLIFF_COLOR, Meta.DEFAULT_CLIFF_COLOR, "Color of the cliffs painted next (when Side Texture is empty).", _plain_setter(terrain, Meta.BRUSH_CLIFF_COLOR))
-	_add_texture_row(section, terrain, "Top Texture", Meta.BRUSH_TOP_TEXTURE, "Optional repeating texture of the ground painted next.", _plain_setter(terrain, Meta.BRUSH_TOP_TEXTURE))
-	_add_float_row(section, terrain, "Top Texture Tile Size", Meta.BRUSH_TOP_TILE_SIZE, 0.1, 64.0, 0.1, Meta.DEFAULT_TILE_SIZE, "Size (m) of one repeat of the top texture.", _plain_setter(terrain, Meta.BRUSH_TOP_TILE_SIZE))
-	_add_texture_row(section, terrain, "Side Texture", Meta.BRUSH_CLIFF_TEXTURE, "Optional repeating texture of the cliffs painted next.", _plain_setter(terrain, Meta.BRUSH_CLIFF_TEXTURE))
-	_add_float_row(section, terrain, "Side Texture Tile Size", Meta.BRUSH_CLIFF_TILE_SIZE, 0.1, 64.0, 0.1, Meta.DEFAULT_TILE_SIZE, "Size (m) of one repeat of the side texture.", _plain_setter(terrain, Meta.BRUSH_CLIFF_TILE_SIZE))
-
-func _build_waterhole_shape_section(parent: VBoxContainer, terrain: Node3D) -> void:
-	var section := _add_section(parent, "Waterhole Shape", false,
-		"Shape of the next waterholes (Apply to Existing Waterholes gives it to those already placed). Biome layers choose where they grow around them (Waterhole Zone).")
-	var w := func(field: String) -> String: return WaterholeStyle.setting_key(field)
-	var d: Dictionary = WaterholeStyle.DEFAULTS
-	var floor_key: String = w.call("floor")
-	var floor_default: float = d["floor"]
-	var irregularity_key: String = w.call("irregularity")
-	var irregularity_default: float = d["irregularity"]
-	var rim_key: String = w.call("rim")
-	var rim_default: float = d["rim"]
-	var lip_key: String = w.call("lip")
-	var lip_default: float = d["lip"]
-	var crack_width_key: String = w.call("crack_width")
-	var crack_width_default: float = d["crack_width"]
-	var curl_key: String = w.call("curl")
-	var curl_default: float = d["curl"]
-	_add_float_row(section, terrain, "Flat Floor", floor_key, 0.0, 0.95, 0.01, floor_default, "Part of the radius that is flat cracked floor; the rest is the bank.", _plain_setter(terrain, floor_key))
-	_add_float_row(section, terrain, "Irregularity", irregularity_key, 0.0, 0.6, 0.01, irregularity_default, "How far the outline wobbles away from a circle.", _plain_setter(terrain, irregularity_key))
-	_add_float_row(section, terrain, "Rim Width", rim_key, 0.01, 2.0, 0.01, rim_default, "Width of the trampled clay ring around the basin, as a part of the radius.", _plain_setter(terrain, rim_key))
-	_add_float_row(section, terrain, "Rim Lip", lip_key, 0.0, 1.0, 0.01, lip_default, "Height of the small earth bank around the basin.", _plain_setter(terrain, lip_key))
-	_add_float_row(section, terrain, "Crack Width", crack_width_key, 0.0, 1.0, 0.01, crack_width_default, "Average width of the cracks between mud plates.", _plain_setter(terrain, crack_width_key))
-	_add_float_row(section, terrain, "Plate Curl", curl_key, 0.0, 0.5, 0.01, curl_default, "How much the plate edges curl up as the mud dries.", _plain_setter(terrain, curl_key))
+	# A tile size only shows with its texture (the panel is rebuilt when one is
+	# set or cleared).
+	_add_texture_row(section, terrain, "Top Texture", Meta.BRUSH_TOP_TEXTURE, "Optional repeating texture of the ground painted next.", _plain_setter(terrain, Meta.BRUSH_TOP_TEXTURE, true))
+	if Meta.get_optional(terrain, Meta.BRUSH_TOP_TEXTURE) != null:
+		_add_float_row(section, terrain, "Top Texture Tile Size", Meta.BRUSH_TOP_TILE_SIZE, 0.1, 64.0, 0.1, Meta.DEFAULT_TILE_SIZE, "Size (m) of one repeat of the top texture.", _plain_setter(terrain, Meta.BRUSH_TOP_TILE_SIZE))
+	_add_texture_row(section, terrain, "Side Texture", Meta.BRUSH_CLIFF_TEXTURE, "Optional repeating texture of the cliffs painted next.", _plain_setter(terrain, Meta.BRUSH_CLIFF_TEXTURE, true))
+	if Meta.get_optional(terrain, Meta.BRUSH_CLIFF_TEXTURE) != null:
+		_add_float_row(section, terrain, "Side Texture Tile Size", Meta.BRUSH_CLIFF_TILE_SIZE, 0.1, 64.0, 0.1, Meta.DEFAULT_TILE_SIZE, "Size (m) of one repeat of the side texture.", _plain_setter(terrain, Meta.BRUSH_CLIFF_TILE_SIZE))
 
 func _build_advanced_details_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(parent, "Details", false, "Grass, trees, rocks and props of the biome.")
@@ -395,15 +374,16 @@ func _build_pixel_map_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	var depth_max: float = maxf(0.0, -Meta.get_float(terrain, Meta.HEIGHT_MIN, Meta.DEFAULT_HEIGHT_MIN))
 	_add_float_row(generator, terrain, "Raised Ground Height", Meta.GENERATOR_RAISE_HEIGHT, 0.0, height_max, 0.1, minf(Meta.DEFAULT_GENERATOR_RAISE_HEIGHT, height_max), "Height of the red pixels (at most Heights & Offsets > Highest Ground).", _plain_setter(terrain, Meta.GENERATOR_RAISE_HEIGHT))
 	_add_float_row(generator, terrain, "Lowered Ground Depth", Meta.GENERATOR_LOWER_DEPTH, 0.0, depth_max, 0.1, minf(Meta.DEFAULT_GENERATOR_LOWER_DEPTH, depth_max), "Depth of the blue pixels (at most Heights & Offsets > Lowest Ground).", _plain_setter(terrain, Meta.GENERATOR_LOWER_DEPTH))
-	_add_float_row(generator, terrain, "Color Tolerance", Meta.GENERATOR_COLOR_TOLERANCE, 0.0, 0.5, 0.01, Meta.DEFAULT_GENERATOR_COLOR_TOLERANCE, "How far a pixel may be from pure white / green / red / blue.", _plain_setter(terrain, Meta.GENERATOR_COLOR_TOLERANCE))
 	_add_float_row(generator, terrain, "Hill Smoothness", Meta.GENERATOR_SMOOTHNESS, 0.0, 32.0, 0.5, 0.0, "Width (cells) of the slopes around red and blue areas. 0 = flat areas with steps.", _plain_setter(terrain, Meta.GENERATOR_SMOOTHNESS))
 
 	_add_checkbox(generator, "One Style for All Colors",
 		"Green, red and blue all get the ground style the Ground tool paints. Off = each color gets the biome ground style picked below.",
-		Meta.get_bool(terrain, Meta.GENERATOR_USE_SINGLE_STYLE, true), _plain_setter(terrain, Meta.GENERATOR_USE_SINGLE_STYLE))
-	_add_generator_style_choice(generator, terrain, "Green Style", "green")
-	_add_generator_style_choice(generator, terrain, "Red Style", "red")
-	_add_generator_style_choice(generator, terrain, "Blue Style", "blue")
+		Meta.get_bool(terrain, Meta.GENERATOR_USE_SINGLE_STYLE, true), _plain_setter(terrain, Meta.GENERATOR_USE_SINGLE_STYLE, true))
+	# One style per color only when it is unticked (the panel is rebuilt).
+	if not Meta.get_bool(terrain, Meta.GENERATOR_USE_SINGLE_STYLE, true):
+		_add_generator_style_choice(generator, terrain, "Green Style", "green")
+		_add_generator_style_choice(generator, terrain, "Red Style", "red")
+		_add_generator_style_choice(generator, terrain, "Blue Style", "blue")
 
 	_add_button(generator, "Generate from Image", "Rebuild the terrain from the image (Ctrl+Z restores the previous terrain).", func() -> void:
 		host.generate_from_image(terrain)

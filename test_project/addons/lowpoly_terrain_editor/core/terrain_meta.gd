@@ -64,7 +64,8 @@ const MAX_RESOLUTION := "_lte_max_resolution"
 const GENERATOR_IMAGE := "_lte_generator_image"
 const GENERATOR_RAISE_HEIGHT := "_lte_generator_raise_height"
 const GENERATOR_LOWER_DEPTH := "_lte_generator_lower_depth"
-const GENERATOR_COLOR_TOLERANCE := "_lte_generator_color_tolerance"
+## Removed setting (pixels take the nearest colour): dropped by ensure_defaults.
+const LEGACY_GENERATOR_COLOR_TOLERANCE := "_lte_generator_color_tolerance"
 const GENERATOR_CLEAR_FEATURES := "_lte_generator_clear_features"
 const GENERATOR_USE_SINGLE_STYLE := "_lte_generator_use_single_style"
 const GENERATOR_SMOOTHNESS := "_lte_generator_smoothness"
@@ -203,9 +204,6 @@ const DEFAULT_MAX_RESOLUTION := 256
 
 const DEFAULT_GENERATOR_RAISE_HEIGHT := 2.0
 const DEFAULT_GENERATOR_LOWER_DEPTH := 1.0
-const DEFAULT_GENERATOR_COLOR_TOLERANCE := 0.08
-## New terrains historically start with a looser tolerance than the fallback.
-const NEW_TERRAIN_GENERATOR_COLOR_TOLERANCE := 0.2
 
 const DEFAULT_ROAD_WIDTH := 2.6
 const DEFAULT_ROAD_Y_OFFSET := 0.035

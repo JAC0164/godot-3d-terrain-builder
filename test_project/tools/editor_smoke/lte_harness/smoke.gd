@@ -153,6 +153,18 @@ func _run() -> void:
 	check("inspector sections %s" % [titles], titles == ["Map", "Look", "Roads, Rivers & Waterholes", "Game", "Advanced"])
 	var paragraphs := panel.find_children("*", "Label", true, false).filter(func(l): return (l as Label).autowrap_mode != TextServer.AUTOWRAP_OFF)
 	check("no help paragraphs (%d)" % paragraphs.size(), paragraphs.is_empty())
+	# Advanced kept short: the waterhole shape is in the biome, pixels take
+	# the nearest colour, rows with no use are hidden.
+	var row_texts: Array = []
+	for label in panel.find_children("*", "Label", true, false):
+		row_texts.append((label as Label).text)
+	var removed_rows := ["Flat Floor", "Irregularity", "Rim Width", "Rim Lip", "Crack Width", "Plate Curl", "Color Tolerance"]
+	check("no Waterhole Shape section, no Color Tolerance",
+		_find_button(inspector, "Waterhole Shape") == null and removed_rows.all(func(text: String) -> bool: return not row_texts.has(text)))
+	var top_textured := terrain.get_meta("_lte_brush_top_texture", null) != null
+	check("Top Texture Tile Size only with a top texture (textured %s)" % top_textured, row_texts.has("Top Texture Tile Size") == top_textured)
+	var single_style: bool = terrain.get_meta("_lte_generator_use_single_style", true)
+	check("pixel map colour styles only when One Style for All Colors is off", row_texts.has("Green Style") == not single_style)
 
 	var mask_before: PackedFloat32Array = (terrain.get_meta("_lte_mask") as PackedFloat32Array).duplicate()
 	plugin._strokes.begin(terrain, Vector3(0, 0, 0))

@@ -1308,9 +1308,6 @@ func generate_from_image(terrain: Node3D) -> void:
 	_rebuild_all(terrain)
 	terrain.notify_property_list_changed()
 
-	var unknown_pixels: int = stats["unknown"]
-	if unknown_pixels > 0:
-		push_warning("Lowpoly Terrain Editor: %d pixel(s) did not match white/green/red/blue within tolerance and were treated as empty." % stats["unknown"])
 	_set_status("Image %d x %d" % [stats["width"], stats["height"]], "Generated from a %d x %d image: %d green, %d red, %d blue pixels." % [stats["width"], stats["height"], stats["green"], stats["red"], stats["blue"]])
 
 	var after := TerrainSnapshot.capture(terrain)

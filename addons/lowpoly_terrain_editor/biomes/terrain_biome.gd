@@ -5,8 +5,9 @@ extends Resource
 ## - ground styles: one-click brush presets (toolbar list next to the Ground tool);
 ## - detail layers: what grows / lies on the ground (grass, rocks, shrubs,
 ##   skulls, trees...), each drawn with one MultiMesh per chunk;
-## - baked shading and waterhole colors, read live by every terrain that
-##   uses the biome: editing them here changes those terrains at once;
+## - baked shading and waterholes (colors and shape), read live by every
+##   terrain that uses the biome: editing them here changes those terrains
+##   at once;
 ## - materials and ambience: your own ground / detail / road / water
 ##   materials and an optional Environment (sky, fog, light) for the game.
 ## It is the terrain's theme: cells painted with a ground style follow it
@@ -100,6 +101,38 @@ static var _default: LowpolyTerrainBiome = null
 @export var waterhole_crack_color := Color(0.28, 0.21, 0.16):
 	set(value):
 		waterhole_crack_color = value
+		emit_changed()
+## Shape of every waterhole of the terrain (WaterholeStyle.SHAPE; one placed
+## before the shape moved here keeps its own when it differs). Part of the
+## radius that is flat cracked floor; the rest is the bank.
+@export_range(0.0, 0.95, 0.01) var waterhole_floor := 0.75:
+	set(value):
+		waterhole_floor = value
+		emit_changed()
+## How far the outline wobbles away from a circle.
+@export_range(0.0, 0.6, 0.01) var waterhole_irregularity := 0.22:
+	set(value):
+		waterhole_irregularity = value
+		emit_changed()
+## Width of the trampled clay ring around the basin, as a part of the radius.
+@export_range(0.01, 2.0, 0.01) var waterhole_rim_width := 0.45:
+	set(value):
+		waterhole_rim_width = value
+		emit_changed()
+## Height (m) of the small earth bank around the basin.
+@export_range(0.0, 1.0, 0.01) var waterhole_rim_lip := 0.1:
+	set(value):
+		waterhole_rim_lip = value
+		emit_changed()
+## Average width (m) of the cracks between mud plates.
+@export_range(0.0, 1.0, 0.01) var waterhole_crack_width := 0.1:
+	set(value):
+		waterhole_crack_width = value
+		emit_changed()
+## How much the plate edges curl up as the mud dries.
+@export_range(0.0, 0.5, 0.01) var waterhole_plate_curl := 0.05:
+	set(value):
+		waterhole_plate_curl = value
 		emit_changed()
 
 @export_group("Materials & Ambience")
@@ -206,6 +239,9 @@ func look_signature() -> String:
 		parts.append(str(get(property)))
 	for property: String in LOOK_PROPERTIES:
 		parts.append(str(get(property)))
+	# Waterhole shape: the carve (heights, collision) and the plates change.
+	for property: String in WATERHOLE_SHAPE_PROPERTIES:
+		parts.append(str(get(property)))
 	# Painted cells follow their biome ground style (StylePalette.sync_with_biome).
 	for style: GroundStyle in ground_styles:
 		if style != null:
@@ -216,6 +252,10 @@ func look_signature() -> String:
 
 ## Baked look properties that never were terrain settings (no migration).
 const LOOK_PROPERTIES: Array[String] = ["macro_variation", "road_material", "water_material"]
+## The waterhole shape (WaterholeStyle.SHAPE; were terrain settings, see
+## TerrainData.migrate_waterhole_shape).
+const WATERHOLE_SHAPE_PROPERTIES: Array[String] = ["waterhole_floor", "waterhole_irregularity",
+	"waterhole_rim_width", "waterhole_rim_lip", "waterhole_crack_width", "waterhole_plate_curl"]
 
 ## The biome a terrain uses (its own, else the built-in Temperate).
 static func of(terrain: Node) -> LowpolyTerrainBiome:

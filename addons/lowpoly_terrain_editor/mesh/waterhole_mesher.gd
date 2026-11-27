@@ -88,8 +88,9 @@ static func assemble(terrain: Node3D, arrays: Array) -> ArrayMesh:
 	return mesh
 
 static func build_arrays(terrain: Node3D, carve: PackedFloat32Array, hole_variant: Variant) -> Array:
-	var hole := WaterholeStyle.migrate(hole_variant)
-	var shape := WaterholeStyle.make_shape(hole, TerrainBiome.of(terrain))
+	var biome: TerrainBiome = TerrainBiome.of(terrain)
+	var hole := WaterholeStyle.migrate(hole_variant, biome)
+	var shape := WaterholeStyle.make_shape(hole, biome)
 	if shape.floor_ratio <= 0.0:
 		return []
 	var resolution: int = terrain.get_meta(Meta.RESOLUTION)

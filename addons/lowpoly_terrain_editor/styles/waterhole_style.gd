@@ -3,15 +3,17 @@ extends RefCounted
 ## Dried waterholes: data and shape.
 ##
 ## A waterhole is a Dictionary in the `_lte_waterholes` metadata: "center"
-## (Vector2, terrain-local X/Z), "radius" and its own style fields (see
-## DEFAULTS). Nothing is written into the heights or the cell styles. Its
+## (Vector2, terrain-local X/Z), "radius", "seed", its depth and plate size
+## (DEFAULTS) and, for one placed before the shape moved to the biome with
+## another shape, its own shape fields (SHAPE). The others take the shape of
+## the terrain's biome. Nothing is written into the heights or the cell styles. Its
 ## effects are all derived from it, so moving, resizing or erasing a
 ## waterhole leaves the terrain intact:
 ## - the depression and the small raised lip: carve depths
 ##   (WaterholeMesher.add_carve), like river beds;
 ## - the clay colour of the basin, the dark crack colour of the floor and the
 ##   tint fading over the rim: baked by TerrainShading, colors read from the
-##   terrain's biome (shared by all its waterholes);
+##   terrain's biome (shared by all its waterholes, like the shape);
 ## - the cracked mud plates on the floor: WaterholeMesher.build;
 ## - the BASIN / RIM zones that detail layers can target (DetailScatter).
 ##
@@ -24,17 +26,22 @@ extends RefCounted
 const Meta = preload("../core/terrain_meta.gd")
 const TerrainBiome = preload("../biomes/terrain_biome.gd")
 
-## Default style of new waterholes. Each field is also a terrain setting
-## (`_lte_waterhole_<field>`, see setting_key()) used for the next ones.
+## Depth and mud plate size of new waterholes, stored in each one. Each
+## field is also a terrain setting (`_lte_waterhole_<field>`, see
+## setting_key(); Inspector > Roads, Rivers & Waterholes) for the next ones.
 const DEFAULTS := {
 	"depth": 0.7,
-	"floor": 0.75,
-	"irregularity": 0.22,
-	"rim": 0.45,
-	"lip": 0.1,
 	"plate_size": 0.9,
-	"crack_width": 0.1,
-	"curl": 0.05,
+}
+
+## Shape field of a waterhole -> the biome property it comes from.
+const SHAPE := {
+	"floor": "waterhole_floor",
+	"irregularity": "waterhole_irregularity",
+	"rim": "waterhole_rim_width",
+	"lip": "waterhole_rim_lip",
+	"crack_width": "waterhole_crack_width",
+	"curl": "waterhole_plate_curl",
 }
 
 const MIN_RADIUS := 0.75
@@ -93,8 +100,9 @@ class Shape:
 static func setting_key(field: String) -> String:
 	return "_lte_waterhole_%s" % field
 
-## Copy of a stored waterhole with every missing field filled in.
-static func migrate(variant: Variant) -> Dictionary:
+## Copy of a stored waterhole with every missing field filled in: the shape
+## from `biome` (null = the built-in Temperate's).
+static func migrate(variant: Variant, biome: TerrainBiome = null) -> Dictionary:
 	var hole: Dictionary = {}
 	if typeof(variant) == TYPE_DICTIONARY:
 		var source: Dictionary = variant
@@ -107,9 +115,14 @@ static func migrate(variant: Variant) -> Dictionary:
 	for field: String in DEFAULTS:
 		if not hole.has(field):
 			hole[field] = DEFAULTS[field]
+	var shape_source: TerrainBiome = biome if biome != null else TerrainBiome.default_biome()
+	for field: String in SHAPE:
+		if not hole.has(field):
+			var property: String = SHAPE[field]
+			hole[field] = shape_source.get(property)
 	return hole
 
-## Style (no centre / radius) from the terrain's waterhole settings.
+## Depth and plate size (no centre / radius) from the terrain's settings.
 static func from_terrain_settings(terrain: Node3D) -> Dictionary:
 	var style := {}
 	for field: String in DEFAULTS:
@@ -146,22 +159,25 @@ static func make(terrain: Node3D, center: Vector2, radius: float) -> Dictionary:
 	hole["seed"] = make_seed(center)
 	return hole
 
-## Gives every existing waterhole the current settings (keeps centre, radius
-## and seed). Returns the number of waterholes changed.
+## Gives every existing waterhole the current depth and plate size, and the
+## biome's shape (an own shape is dropped). Keeps centre, radius and seed.
+## Returns the number of waterholes changed.
 static func apply_settings_to_all(terrain: Node3D) -> int:
 	var holes: Array = list(terrain).duplicate(true)
 	var style := from_terrain_settings(terrain)
 	for i in range(holes.size()):
 		var hole := migrate(holes[i])
 		hole.merge(style, true)
+		for field: String in SHAPE:
+			hole.erase(field)
 		holes[i] = hole
 	terrain.set_meta(Meta.WATERHOLES, holes)
 	return holes.size()
 
-## Shape of one stored waterhole; `biome` gives its colors (null = the
-## built-in Temperate's, enough for bounds and carving).
+## Shape of one stored waterhole; `biome` gives its colors and shape (null =
+## the built-in Temperate's). shape_in() uses the terrain's biome.
 static func make_shape(variant: Variant, biome: TerrainBiome = null) -> Shape:
-	var hole := migrate(variant)
+	var hole := migrate(variant, biome)
 	var shape := Shape.new()
 	var center: Vector2 = hole["center"]
 	shape.cx = center.x
@@ -191,6 +207,10 @@ static func make_shape(variant: Variant, biome: TerrainBiome = null) -> Shape:
 	shape.bounds = Rect2(center - Vector2(reach, reach), Vector2(reach, reach) * 2.0)
 	return shape
 
+## Shape of one stored waterhole of `terrain` (its biome).
+static func shape_in(terrain: Node3D, variant: Variant) -> Shape:
+	return make_shape(variant, TerrainBiome.of(terrain))
+
 ## Shapes of every waterhole, or only those whose bounds touch `rect`.
 static func shapes(terrain: Node3D, rect: Variant = null) -> Array[Shape]:
 	var result: Array[Shape] = []
@@ -207,12 +227,13 @@ static func shapes(terrain: Node3D, rect: Variant = null) -> Array[Shape]:
 ## Index of the waterhole whose basin contains `point`, or -1.
 static func find_at(terrain: Node3D, point: Vector2, margin: float = 0.0) -> int:
 	var holes := list(terrain)
+	var biome: TerrainBiome = TerrainBiome.of(terrain)
 	for i in range(holes.size() - 1, -1, -1):
-		var shape := make_shape(holes[i])
+		var shape := make_shape(holes[i], biome)
 		if shape.distance(point.x, point.y) <= 1.0 + margin / shape.radius:
 			return i
 	return -1
 
 ## Bounds of the waterhole at `index` (rim included).
 static func bounds_of(terrain: Node3D, index: int) -> Rect2:
-	return make_shape(list(terrain)[index]).bounds
+	return shape_in(terrain, list(terrain)[index]).bounds

@@ -7,6 +7,7 @@ const GridMath = preload("grid_math.gd")
 const StylePalette = preload("../styles/style_palette.gd")
 const TerrainBiome = preload("../biomes/terrain_biome.gd")
 const FeatureStyle = preload("../styles/feature_style.gd")
+const WaterholeStyle = preload("../styles/waterhole_style.gd")
 
 ## Every terrain setting with its value on a new terrain. initialize() writes
 ## them all; ensure_defaults() adds the ones a scene is missing (made before
@@ -32,7 +33,6 @@ const SETTING_DEFAULTS := {
 	Meta.MAX_RESOLUTION: Meta.DEFAULT_MAX_RESOLUTION,
 	Meta.GENERATOR_RAISE_HEIGHT: Meta.DEFAULT_GENERATOR_RAISE_HEIGHT,
 	Meta.GENERATOR_LOWER_DEPTH: Meta.DEFAULT_GENERATOR_LOWER_DEPTH,
-	Meta.GENERATOR_COLOR_TOLERANCE: Meta.DEFAULT_GENERATOR_COLOR_TOLERANCE,
 	Meta.GENERATOR_SMOOTHNESS: 0.0,
 	Meta.GENERATOR_CLEAR_FEATURES: true,
 	Meta.GENERATOR_USE_SINGLE_STYLE: true,
@@ -66,8 +66,6 @@ static func initialize(terrain: Node3D) -> void:
 	terrain.set_meta(Meta.RIVERS, [])
 	for key: String in SETTING_DEFAULTS:
 		terrain.set_meta(key, SETTING_DEFAULTS[key])
-	# New terrains start with a looser tolerance than old scenes had.
-	terrain.set_meta(Meta.GENERATOR_COLOR_TOLERANCE, Meta.NEW_TERRAIN_GENERATOR_COLOR_TOLERANCE)
 	StylePalette.copy_current_paint_to_generator_styles(terrain)
 	terrain.set_meta(Meta.STYLE_PALETTE, [StylePalette.make_default_style()])
 	var cell_styles := PackedInt32Array()
@@ -97,8 +95,9 @@ static func ensure_defaults(terrain: Node3D) -> void:
 		if not terrain.has_meta(shade_key): terrain.set_meta(shade_key, SHADE_DEFAULTS[shade_key])
 	migrate_look(terrain)
 	migrate_feature_look(terrain)
+	migrate_waterhole_shape(terrain)
 	# Per-kind densities now live in the biome's detail layers.
-	for legacy_key: String in [Meta.LEGACY_DETAIL_GRASS_DENSITY, Meta.LEGACY_DETAIL_ROCK_DENSITY, Meta.LEGACY_LEVEL_PATH]:
+	for legacy_key: String in [Meta.LEGACY_DETAIL_GRASS_DENSITY, Meta.LEGACY_DETAIL_ROCK_DENSITY, Meta.LEGACY_LEVEL_PATH, Meta.LEGACY_GENERATOR_COLOR_TOLERANCE]:
 		if terrain.has_meta(legacy_key): terrain.remove_meta(legacy_key)
 	StylePalette.ensure_material_data(terrain)
 	StylePalette.sync_with_biome(terrain)
@@ -298,6 +297,40 @@ static func migrate_feature_look(terrain: Node3D) -> bool:
 		if list_changed:
 			terrain.set_meta(key, cleaned)
 			changed = true
+	return changed
+
+## The waterhole shape (Flat Floor, Irregularity, Rim Width, Rim Lip, Crack
+## Width, Plate Curl) moved from the terrain settings to the biome
+## (WaterholeStyle.SHAPE). The settings are removed (new waterholes take the
+## biome's shape). A stored waterhole drops each shape field equal to the
+## biome's (it follows the biome from then on) and keeps the others, so it
+## looks the same. Returns true when the terrain changed.
+static func migrate_waterhole_shape(terrain: Node3D) -> bool:
+	var changed := false
+	for field: String in WaterholeStyle.SHAPE:
+		var key := WaterholeStyle.setting_key(field)
+		if terrain.has_meta(key):
+			terrain.remove_meta(key)
+			changed = true
+	var holes: Array = terrain.get_meta(Meta.WATERHOLES, [])
+	var biome: TerrainBiome = TerrainBiome.of(terrain)
+	var cleaned: Array = []
+	var list_changed := false
+	for hole: Variant in holes:
+		if typeof(hole) != TYPE_DICTIONARY:
+			cleaned.append(hole)
+			continue
+		var hole_dict: Dictionary = hole
+		var copy: Dictionary = hole_dict.duplicate(true)
+		for field: String in WaterholeStyle.SHAPE:
+			var property: String = WaterholeStyle.SHAPE[field]
+			if copy.has(field) and _same_value(copy[field], biome.get(property)):
+				copy.erase(field)
+				list_changed = true
+		cleaned.append(copy)
+	if list_changed:
+		terrain.set_meta(Meta.WATERHOLES, cleaned)
+		changed = true
 	return changed
 
 static func _feature_has_biome_look(feature: Dictionary, feature_type: String, biome: TerrainBiome) -> bool:

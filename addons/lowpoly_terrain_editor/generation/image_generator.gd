@@ -5,7 +5,8 @@ extends RefCounted
 ## Each pixel becomes one cell:
 ##   WHITE / transparent -> empty      GREEN -> ground
 ##   RED                 -> raised     BLUE  -> indented
-## Pixels matching none of these (within the colour tolerance) are empty.
+## Any other colour counts as the nearest of the four (a pale green is
+## ground; black or grey, as far from all of them, is empty).
 
 const Meta = preload("../core/terrain_meta.gd")
 const GridMath = preload("../core/grid_math.gd")
@@ -36,8 +37,9 @@ static func validate_image(image: Image) -> String:
 		return "source image must be between 1x1 and 256x256 pixels. Got %dx%d." % [width, height]
 	return ""
 
-## Nearest reference colour (Chebyshev distance on RGB), as a PixelClass.
-static func classify_pixel(color: Color, tolerance: float) -> int:
+## Nearest reference colour (Chebyshev distance on RGB), as a PixelClass;
+## UNKNOWN when farther than `tolerance` (1 = always the nearest).
+static func classify_pixel(color: Color, tolerance: float = 1.0) -> int:
 	if color.a <= 0.01:
 		return PixelClass.EMPTY
 
@@ -75,7 +77,6 @@ static func apply(terrain: Node3D, image: Image) -> Dictionary:
 	var raise_height: float = clampf(Meta.get_float(terrain, Meta.GENERATOR_RAISE_HEIGHT, Meta.DEFAULT_GENERATOR_RAISE_HEIGHT), 0.0, maxf(0.0, TerrainData.height_max(terrain)))
 	var lower_depth: float = maxf(0.0, Meta.get_float(terrain, Meta.GENERATOR_LOWER_DEPTH, Meta.DEFAULT_GENERATOR_LOWER_DEPTH))
 	var lower_height: float = clampf(-lower_depth, TerrainData.height_min(terrain), 0.0)
-	var tolerance: float = clampf(Meta.get_float(terrain, Meta.GENERATOR_COLOR_TOLERANCE, Meta.DEFAULT_GENERATOR_COLOR_TOLERANCE), 0.0, 0.5)
 	var smoothness: float = clampf(Meta.get_float(terrain, Meta.GENERATOR_SMOOTHNESS, 0.0), 0.0, 32.0)
 
 	var cell_active := PackedByteArray()
@@ -103,7 +104,7 @@ static func apply(terrain: Node3D, image: Image) -> Dictionary:
 			var pixel: Color = image.get_pixel(image_x, image_y)
 			var cell_index: int = (offset_z + image_y) * side_cells + (offset_x + image_x)
 
-			match classify_pixel(pixel, tolerance):
+			match classify_pixel(pixel):
 				PixelClass.EMPTY:
 					pass
 				PixelClass.GROUND:
