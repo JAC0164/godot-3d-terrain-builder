@@ -46,6 +46,7 @@ const TerrainStorage = preload("core/terrain_storage.gd")
 const DetailScatter = preload("mesh/detail_scatter.gd")
 const GroundBumps = preload("core/ground_bumps.gd")
 const TerrainNavigation = preload("navigation/terrain_navigation.gd")
+const HeightmapIO = preload("generation/heightmap_io.gd")
 
 ## Delay after the last biome edit before the details are re-scattered.
 const BIOME_REBUILD_DELAY_MS := 250
@@ -1221,6 +1222,69 @@ func grow_canvas(terrain: Node3D) -> void:
 	_rebuild_all(terrain)
 	terrain.notify_property_list_changed()
 	_register_snapshot_undo("Lowpoly Terrain: Grow Terrain", terrain, before, TerrainSnapshot.capture(terrain))
+
+## Advanced > Terrain Size > Import Heightmap: the heights from an EXR / PNG /
+## raw file (HeightmapIO), resized to the grid, with Undo/Redo.
+func import_heightmap(terrain: Node3D) -> void:
+	if not is_instance_valid(terrain):
+		return
+	_open_file_dialog(EditorFileDialog.FILE_MODE_OPEN_FILE, "Import Heightmap",
+		PackedStringArray(["*.exr ; OpenEXR (metres)", "*.png ; PNG (8 or 16 bit)", "*.r16, *.raw ; 16-bit raw"]),
+		func(path: String) -> void:
+			if not is_instance_valid(terrain):
+				return
+			var before := TerrainSnapshot.capture(terrain)
+			var stats := HeightmapIO.import_file(terrain, path)
+			if stats.has("error"):
+				_notify(str(stats["error"]))
+				return
+			_rebuild_all(terrain)
+			var after := TerrainSnapshot.capture(terrain)
+			if not TerrainSnapshot.equal(before, after):
+				_register_snapshot_undo("Lowpoly Terrain: Import Heightmap", terrain, before, after)
+			var source_range: Vector2 = stats["range"]
+			var clamped: int = stats["clamped"]
+			var detail := "%s (%d x %d)%s." % [path.get_file(), stats["width"], stats["height"],
+				"" if stats["metres"] else ", black %.2f m to white %.2f m" % [source_range.x, source_range.y]]
+			if clamped > 0:
+				detail += " %d points cut to the Lowest / Highest Ground (Advanced > Heights & Offsets)." % clamped
+			_set_status("Heightmap imported", detail))
+
+## Advanced > Terrain Size > Export Heightmap: <name>.exr (metres), .png
+## (16-bit) and .json (its range).
+func export_heightmap(terrain: Node3D) -> void:
+	if not is_instance_valid(terrain):
+		return
+	_open_file_dialog(EditorFileDialog.FILE_MODE_SAVE_FILE, "Export Heightmap",
+		PackedStringArray(["*.exr ; OpenEXR (+ 16-bit PNG and JSON)"]),
+		func(path: String) -> void:
+			if not is_instance_valid(terrain):
+				return
+			var error := HeightmapIO.export_files(terrain, path)
+			if not error.is_empty():
+				_notify(error)
+				return
+			var base := path.get_basename().get_file()
+			_set_status("Heightmap exported", "%s.exr (metres), %s.png (16-bit) and %s.json (its range)." % [base, base, base])
+			EditorInterface.get_resource_filesystem().scan())
+
+## A one-use file dialog on the whole file system; `on_file` gets the path.
+func _open_file_dialog(mode: EditorFileDialog.FileMode, title: String, filters: PackedStringArray, on_file: Callable) -> void:
+	var dialog := EditorFileDialog.new()
+	dialog.name = "LowpolyHeightmapDialog"
+	dialog.file_mode = mode
+	dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+	dialog.title = title
+	dialog.filters = filters
+	var close := func() -> void:
+		if is_instance_valid(dialog):
+			dialog.queue_free()
+	dialog.file_selected.connect(func(path: String) -> void:
+		close.call()
+		on_file.call(path))
+	dialog.canceled.connect(close)
+	NodeNames.add(EditorInterface.get_base_control(), dialog)
+	dialog.popup_file_dialog()
 
 ## Rebuilds the terrain from its Source Pixel Map, with Undo/Redo.
 func generate_from_image(terrain: Node3D) -> void:

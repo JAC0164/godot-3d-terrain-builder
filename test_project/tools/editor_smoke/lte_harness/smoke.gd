@@ -142,6 +142,8 @@ func _run() -> void:
 	await _frames(5)
 	var inspector := EditorInterface.get_inspector()
 	check("inspector panel built", _find_button(inspector, "Generate from Image") != null)
+	check("Bake Navigation, Import Heightmap and Export Heightmap buttons",
+		_find_button(inspector, "Bake Navigation") != null and _find_button(inspector, "Import Heightmap") != null and _find_button(inspector, "Export Heightmap") != null)
 	# Simplicity audit step 2: 4 sections + a closed Advanced, no paragraphs.
 	var panel := _find(inspector, "LowPoly Terrain")
 	var titles: Array = []
@@ -310,6 +312,40 @@ func _run() -> void:
 	var grown: int = terrain.get_meta("_lte_resolution")
 	plugin._toolbar_undo()
 	check("grow terrain: Undo gives the old size back (%d -> %d -> %d)" % [size_before, grown, int(terrain.get_meta("_lte_resolution"))], grown > size_before and int(terrain.get_meta("_lte_resolution")) == size_before and terrain.get_meta("_lte_heights") == heights_before_limit)
+
+	# Export / Import Heightmap through their file dialogs, Import undoable.
+	var heightmap_base := ProjectSettings.globalize_path("user://smoke_heightmap")
+	var heights_saved: PackedFloat32Array = (terrain.get_meta("_lte_heights") as PackedFloat32Array).duplicate()
+	plugin.export_heightmap(terrain)
+	var export_dialog := EditorInterface.get_base_control().get_node_or_null("LowpolyHeightmapDialog") as EditorFileDialog
+	var export_found := export_dialog != null
+	if export_dialog != null:
+		export_dialog.file_selected.emit(heightmap_base + ".exr")
+	await _frames(2)
+	check("Export Heightmap: dialog, then .exr / .png / .json written", export_found and FileAccess.file_exists(heightmap_base + ".exr") and FileAccess.file_exists(heightmap_base + ".png") and FileAccess.file_exists(heightmap_base + ".json"))
+	var ramp := Image.create(16, 16, false, Image.FORMAT_RF)
+	for y in 16:
+		for x in 16:
+			ramp.set_pixel(x, y, Color(float(x) / 15.0, 0.0, 0.0))
+	ramp.save_exr(heightmap_base + "_ramp.exr", true)
+	plugin.import_heightmap(terrain)
+	var import_dialog := EditorInterface.get_base_control().get_node_or_null("LowpolyHeightmapDialog") as EditorFileDialog
+	var import_found := import_dialog != null
+	if import_dialog != null:
+		import_dialog.file_selected.emit(heightmap_base + "_ramp.exr")
+	await _frames(2)
+	var ramped: PackedFloat32Array = terrain.get_meta("_lte_heights")
+	var ramp_resolution: int = terrain.get_meta("_lte_resolution")
+	check("Import Heightmap: the ramp is the ground (%.2f .. %.2f m)" % [ramped[0], ramped[ramp_resolution - 1]], import_found and is_equal_approx(ramped[0], 0.0) and is_equal_approx(ramped[ramp_resolution - 1], 1.0))
+	plugin._toolbar_undo()
+	check("Import Heightmap: Undo gives the heights back", terrain.get_meta("_lte_heights") == heights_saved)
+	plugin.import_heightmap(terrain)
+	import_dialog = EditorInterface.get_base_control().get_node_or_null("LowpolyHeightmapDialog") as EditorFileDialog
+	if import_dialog != null:
+		import_dialog.file_selected.emit(heightmap_base + ".exr")
+	await _frames(2)
+	check("Import Heightmap: its own export gives the same heights", terrain.get_meta("_lte_heights") == heights_saved)
+	plugin._toolbar_undo()
 
 	plugin.set_tuning_setting(terrain, "_lte_height_max", 2.0)
 	check("tuning applied", float(terrain.get_meta("_lte_height_max")) == 2.0)

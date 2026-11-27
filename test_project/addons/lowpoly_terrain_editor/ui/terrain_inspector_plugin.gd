@@ -328,6 +328,12 @@ func _build_size_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	_add_button(section, "Grow Terrain", "Grow the terrain by a few cells on every side.", func() -> void:
 		host.grow_canvas(terrain)
 	)
+	_add_button(section, "Import Heightmap", "Heights from an EXR (metres), a PNG (8 or 16 bit) or a .r16 / .raw file, resized to the terrain. A PNG / raw spans the range of the .json beside it, else the current lowest to highest ground. Ctrl+Z undoes it.", func() -> void:
+		host.import_heightmap(terrain)
+	)
+	_add_button(section, "Export Heightmap", "Write the heights as <name>.exr (metres), <name>.png (16-bit, lowest = black, highest = white) and <name>.json (that range), to shape them in another tool.", func() -> void:
+		host.export_heightmap(terrain)
+	)
 
 func _build_heights_section(parent: VBoxContainer, terrain: Node3D) -> void:
 	var section := _add_section(parent, "Heights & Offsets", false,
